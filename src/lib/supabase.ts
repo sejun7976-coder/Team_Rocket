@@ -1,13 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
+import { resolveSupabaseConfiguration } from "./supabaseConfig";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+const configuration = resolveSupabaseConfiguration({
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+  VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+});
 
-export const isSupabaseConfigured = Boolean(url && publishableKey);
+export const isSupabaseConfigured = configuration.configured;
+export const supabaseConfigurationIssues = configuration.issues;
 
 export const supabase = createClient(
-  url ?? "http://127.0.0.1:54321",
-  publishableKey ?? "local-development-publishable-key",
+  configuration.clientUrl,
+  configuration.clientPublishableKey,
   {
     auth: {
       persistSession: true,
