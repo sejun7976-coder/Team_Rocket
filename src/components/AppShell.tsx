@@ -1,0 +1,61 @@
+import { useQuery } from "@tanstack/react-query";
+import { Activity, Bell, CalendarDays, CheckSquare, FolderCog, FolderKanban, LayoutDashboard, LockKeyhole, LogOut, Menu, Moon, Settings, Shield, SlidersHorizontal, Sun, Users, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { isSystemAdmin } from "../lib/authPolicy";
+import { cn } from "../lib/utils";
+import { listNotifications } from "../services/activity";
+import { useAuthStore } from "../stores/authStore";
+import { useProjectKeyStore } from "../stores/projectKeyStore";
+import { Avatar, Badge, Button } from "./ui";
+
+const nav = [
+  ["/dashboard", "Dashboard", LayoutDashboard],
+  ["/projects", "내 프로젝트", FolderKanban],
+  ["/my-tasks", "내 작업", CheckSquare],
+  ["/calendar", "일정", CalendarDays],
+  ["/activity", "활동", Activity]
+] as const;
+
+const adminNav = [
+  ["/admin/users", "사용자 관리", Users],
+  ["/admin/projects", "프로젝트 관리", FolderCog],
+  ["/admin/system", "시스템 설정", SlidersHorizontal]
+] as const;
+
+function NavigationLink({ to, label, Icon }: { to: string; label: string; Icon: typeof LayoutDashboard }) {
+  return <NavLink to={to} className={({ isActive }) => cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition", isActive ? "bg-brand/10 text-brand" : "text-muted hover:bg-raised hover:text-ink")}><Icon size={18} />{label}</NavLink>;
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const { user, profile, logout, lockKeyring } = useAuthStore();
+  const admin = isSystemAdmin(user, profile);
+  const forgetAll = useProjectKeyStore((state) => state.forgetAll);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem("rocket-theme");
+    return stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  const notifications = useQuery({ queryKey: ["notifications"], queryFn: listNotifications, refetchInterval: 60_000 });
+  const unread = notifications.data?.filter((item) => !item.read_at).length ?? 0;
+
+  useEffect(() => { document.documentElement.classList.toggle("dark", dark); localStorage.setItem("rocket-theme", dark ? "dark" : "light"); }, [dark]);
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    let lastActivity = Date.now();
+    const mark = () => { lastActivity = Date.now(); };
+    const interval = window.setInterval(() => {
+      if (Date.now() - lastActivity >= 15 * 60 * 1000) { forgetAll(); lockKeyring(); navigate("/unlock", { replace: true }); }
+    }, 30_000);
+    ["pointerdown", "keydown", "touchstart", "scroll"].forEach((event) => window.addEventListener(event, mark, { passive: true }));
+    return () => { window.clearInterval(interval); ["pointerdown", "keydown", "touchstart", "scroll"].forEach((event) => window.removeEventListener(event, mark)); };
+  }, [forgetAll, lockKeyring, navigate]);
+
+  const lock = () => { forgetAll(); lockKeyring(); navigate("/unlock"); };
+  const signOut = async () => { forgetAll(); await logout(); navigate("/login", { replace: true }); };
+  const sidebar = <aside className="flex h-full w-[250px] flex-col border-r border-line bg-surface"><div className="flex h-16 items-center gap-3 border-b border-line px-5"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand font-black text-white">R</div><div><div className="text-sm font-extrabold tracking-tight text-ink">Rocket Campus</div><div className="text-[9px] font-bold uppercase tracking-[.16em] text-muted">Project workspace</div></div></div><nav className="scrollbar-thin flex-1 space-y-1 overflow-y-auto p-3">{nav.map(([to, label, Icon]) => <NavigationLink key={to} to={to} label={label} Icon={Icon} />)}{admin && <div className="mt-5 border-t border-line pt-4"><div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-black uppercase tracking-[.14em] text-muted"><Shield size={13} /> 관리자</div>{adminNav.map(([to, label, Icon]) => <NavigationLink key={to} to={to} label={label} Icon={Icon} />)}</div>}</nav><div className="border-t border-line p-3"><NavigationLink to="/settings" label="설정" Icon={Settings} /><button onClick={() => void signOut()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted hover:bg-red-500/10 hover:text-red-600"><LogOut size={18} />로그아웃</button></div></aside>;
+
+  return <div className="min-h-screen bg-canvas"><div className="fixed inset-y-0 left-0 z-40 hidden lg:block">{sidebar}</div>{mobileOpen && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="메뉴 닫기" className="absolute inset-0 bg-slate-950/45" onClick={() => setMobileOpen(false)} /><div className="relative h-full w-[270px]">{sidebar}<Button variant="ghost" className="absolute right-3 top-4 h-8 w-8 p-0" onClick={() => setMobileOpen(false)}><X size={18} /></Button></div></div>}<div className="lg:pl-[250px]"><header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur sm:px-6"><div className="flex items-center gap-3"><Button variant="ghost" className="h-9 w-9 p-0 lg:hidden" onClick={() => setMobileOpen(true)}><Menu size={19} /></Button><div className="hidden text-sm font-semibold text-muted sm:block">안녕하세요, <span className="text-ink">{profile?.name}</span>님</div></div><div className="flex items-center gap-1.5"><Button variant="ghost" className="relative h-9 w-9 p-0" aria-label="알림" onClick={() => navigate("/notifications")}><Bell size={18} />{unread > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />}</Button><Button variant="ghost" className="h-9 w-9 p-0" aria-label="테마 변경" onClick={() => setDark((value) => !value)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</Button><Button variant="ghost" size="sm" onClick={lock} className="hidden sm:inline-flex"><LockKeyhole size={16} /> 잠금</Button><div className="ml-2 flex items-center gap-2 border-l border-line pl-3"><Avatar name={profile?.name ?? "사용자"} url={profile?.avatar_url} size="sm" /><div className="hidden md:block"><div className="max-w-28 truncate text-xs font-bold text-ink">{profile?.name}</div><div className="text-[10px] text-muted">{profile?.student_id}</div></div>{admin ? <Badge tone="purple" className="hidden xl:inline-flex">system admin</Badge> : profile?.github_username && <Badge tone="neutral" className="hidden xl:inline-flex">@{profile.github_username}</Badge>}</div></div></header><main>{children}</main></div></div>;
+}
