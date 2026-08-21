@@ -11,3 +11,9 @@ supabase/.temp/
 *.log
 .DS_Store
 Thumbs.db
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+.supabase/
