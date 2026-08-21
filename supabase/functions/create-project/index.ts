@@ -1,4 +1,4 @@
-import { requireReadyUser } from "../_shared/auth.ts";
+import { requireSystemAdmin } from "../_shared/auth.ts";
 import { configuredOwner, ensureProjectRepository, verifyConfiguredOwner } from "../_shared/github.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
 import { requireKeyEnvelope, requirePublicJwk, requireRepositoryName, requireText, requireUuid } from "../_shared/validation.ts";
@@ -14,7 +14,7 @@ interface RequestBody {
 }
 
 serve(async (request) => {
-  const { user, admin } = await requireReadyUser(request);
+  const { user, admin } = await requireSystemAdmin(request);
   const body = await readJson<RequestBody>(request);
   const name = requireText(body.name, "프로젝트 이름", 1, 120);
   const description = body.description === undefined || body.description === "" ? null : requireText(body.description, "설명", 1, 1000);
@@ -39,6 +39,7 @@ serve(async (request) => {
     p_wrapped_key: wrappedKey,
     p_ephemeral_public_key: ephemeralPublicKey
   });
+  if (beginError?.code === "PPC01") throw new ApiError(403, "SYSTEM_ADMIN_REQUIRED", "시스템 관리자 권한이 필요합니다.");
   if (beginError || !project) throw new ApiError(500, "PROJECT_TRANSACTION_FAILED", "프로젝트 생성 transaction에 실패했습니다.");
   if (project.created_by !== user.id) throw new ApiError(403, "PROJECT_DENIED", "프로젝트에 접근할 수 없습니다.");
   if (project.status === "active") return json(request, { project, idempotent: true });

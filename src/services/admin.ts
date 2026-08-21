@@ -16,6 +16,22 @@ export interface AdminUser {
   password_changed_at: string | null;
   key_reset_at: string | null;
   lastSignInAt: string | null;
+  recentIpAddress: string | null;
+  recentCountryCode: string | null;
+  recentDevice: string | null;
+  loginCount30Days: number;
+}
+
+export type AccessLogEventType = "login" | "logout" | "password_changed" | "session_refreshed";
+
+export interface AdminAccessLog {
+  id: string;
+  source: "auth" | "app";
+  eventType: AccessLogEventType;
+  ipAddress: string | null;
+  countryCode: string | null;
+  device: string | null;
+  createdAt: string;
 }
 
 export interface AdminProject {
@@ -60,4 +76,15 @@ export async function setAdminUserActive(userId: string, active: boolean): Promi
 export async function listAdminProjects(): Promise<AdminProject[]> {
   const data = await invokeAdmin<{ projects: AdminProject[] }>("admin-list-projects");
   return data.projects;
+}
+
+export async function listAdminAccessLogs(input: {
+  userId: string;
+  eventType?: AccessLogEventType;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ logs: AdminAccessLog[]; hasMore: boolean }> {
+  return invokeAdmin("admin-list-access-logs", input);
 }

@@ -19,6 +19,7 @@ Migration은 반드시 순서대로 적용한다.
 4. `202608220004_system_admin_bootstrap.sql`: 최초 관리자 one-time claim/latch, service-role 전용 bootstrap RPC
 5. `202608220005_recoverable_system_admin_bootstrap.sql`: partial bootstrap 상태 판별, 기존 Auth UUID 재사용, recovery finalize와 안전한 오류 코드
 6. `202608220006_idempotent_first_login.sql`: service-role 전용 최초 로그인 finalize RPC, profile/keyring 원자적 저장과 재시도 복구
+7. `202608220007_admin_project_access_logs.sql`: system_admin 전용 프로젝트 생성 DB 방어, 90일 접속 로그, Auth Audit Log 관리자 RPC
 
 SQL Editor에서 table을 수동 생성하지 않는다.
 
@@ -35,6 +36,9 @@ Supabase Dashboard의 Authentication 설정에서 다음 값을 직접 확인한
 - Prevent leaked passwords: OFF
 - Email confirmation: 관리자 API가 `email_confirm: true`로 생성하므로 사용자 확인 메일 불필요
 - JWT expiry: 기본 3600초 사용 가능
+- Authentication → Audit Logs → **Write audit logs to the database: ON**
+
+Auth Audit Log의 DB 저장을 켜면 `auth.audit_log_entries`의 로그인·로그아웃·비밀번호 변경·token refresh가 관리자 접속 기록의 authoritative source로 사용된다. `auth` schema는 Data API에 노출하지 않으며 브라우저가 직접 조회하지 않는다. 국가·기기 보강용 `public.user_access_logs`는 service-role 전용이고, 신규 이벤트 기록 시 90일이 지난 행을 indexed opportunistic cleanup으로 제거하므로 Free plan에서도 `pg_cron` 없이 동작한다.
 
 사용자에게 보이는 공통 초기 비밀번호는 `1234`이고, 최초 로그인 이후 정확히 숫자 4자리 PIN 또는 일반 비밀번호를 사용할 수 있다. 이 원문 credential은 Supabase Auth에 직접 전달하지 않는다. 모든 Auth 생성·로그인·변경·초기화 경로는 `rocket-campus-auth:v1:{studentId}:{credential}`을 Web Crypto SHA-256으로 digest한 64자리 hex credential을 전달한다. 이는 password entropy를 높이는 보안 기능이 아니라 Hosted Auth 최소 길이 제약과 4자리 PIN UX를 연결하는 compatibility layer다.
 
@@ -147,6 +151,8 @@ npx supabase functions deploy sync-project-member
 npx supabase functions deploy remove-project-member
 npx supabase functions deploy github-retry
 npx supabase functions deploy delete-github-repository
+npx supabase functions deploy record-access-event
+npx supabase functions deploy admin-list-access-logs
 ```
 
 상시 배포하는 모든 Function은 JWT 검증을 유지하며 `--no-verify-jwt`로 배포하지 않는다. 유일한 예외는 3절의 CLI가 배포 후 즉시 삭제하는 일회성 `bootstrap-system-admin`이다. `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`는 hosted Edge Function에 기본 제공되는 값을 사용한다.

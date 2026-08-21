@@ -1,3 +1,10 @@
+import { corsHeaders as sdkCorsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
+import {
+  allowedOrigin as resolveAllowedOrigin,
+  buildCorsHeaders,
+  createCorsPreflightResponse
+} from "./corsPolicy.ts";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -9,26 +16,13 @@ export class ApiError extends Error {
 }
 
 function allowedOrigin(request: Request): string | null {
-  const origin = request.headers.get("Origin");
   const configured = Deno.env.get("FRONTEND_URL") ?? "http://127.0.0.1:3000";
-  try {
-    // Browser Origin에는 path가 없다. GitHub Pages의 전체 app URL이 Secret에
-    // 등록되어도 scheme/host/port만 비교해 정확한 단일 origin만 허용한다.
-    return origin === new URL(configured).origin ? origin : null;
-  } catch {
-    return null;
-  }
+  return resolveAllowedOrigin(request.headers.get("Origin"), configured);
 }
 
 export function corsHeaders(request: Request): Record<string, string> {
-  const origin = allowedOrigin(request);
-  return {
-    ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-idempotency-key",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "600",
-    Vary: "Origin"
-  };
+  const configured = Deno.env.get("FRONTEND_URL") ?? "http://127.0.0.1:3000";
+  return buildCorsHeaders(request.headers.get("Origin"), configured, sdkCorsHeaders);
 }
 
 export function json(request: Request, body: unknown, status = 200): Response {
@@ -56,8 +50,8 @@ export async function readJson<T>(request: Request, maxBytes = 32_768): Promise<
 export function serve(handler: (request: Request) => Promise<Response>): void {
   Deno.serve(async (request) => {
     if (request.method === "OPTIONS") {
-      if (!allowedOrigin(request)) return json(request, { error: "허용되지 않은 origin입니다.", code: "ORIGIN_DENIED" }, 403);
-      return new Response(null, { status: 204, headers: corsHeaders(request) });
+      const configured = Deno.env.get("FRONTEND_URL") ?? "http://127.0.0.1:3000";
+      return createCorsPreflightResponse(request, configured, sdkCorsHeaders);
     }
     if (request.method !== "POST") return json(request, { error: "허용되지 않은 method입니다.", code: "METHOD_NOT_ALLOWED" }, 405);
     if (request.headers.has("Origin") && !allowedOrigin(request)) {

@@ -12,6 +12,7 @@ import { needsFirstLogin } from "../lib/authPolicy";
 import { AuthenticatedFunctionError, invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 import { supabase } from "../lib/supabase";
 import { studentIdToInternalEmail } from "../lib/utils";
+import { recordAccessEventBestEffort, recordAccessEvent } from "../services/accessLogs";
 import type { Profile } from "../types/domain";
 
 export type LoginDestination = "first-login" | "dashboard";
@@ -167,6 +168,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         const existing = keyringRecord(profile);
         const keyring = existing ? await unlockUserKeyring(credential, existing) : null;
         set({ loading: false, session: data.session, user: data.user, profile, keyring });
+        recordAccessEventBestEffort("login");
         return "first-login";
       }
 
@@ -181,6 +183,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         keyring = created.keyring;
       }
       set({ loading: false, session: data.session, user: data.user, profile, keyring });
+      recordAccessEventBestEffort("login");
       return "dashboard";
     } catch (error) {
       await supabase.auth.signOut().catch(() => undefined);
@@ -216,6 +219,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         keyring: rebuilt.keyring,
         error: null
       });
+      recordAccessEventBestEffort("password_changed");
     } catch (error) {
       set({ loading: false, error: errorMessage(error) });
       throw error;
@@ -245,6 +249,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   lockKeyring: () => set({ keyring: null }),
 
   logout: async () => {
+    await recordAccessEvent("logout").catch(() => undefined);
     await supabase.auth.signOut();
     set({ session: null, user: null, profile: null, keyring: null, error: null });
   },

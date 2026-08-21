@@ -8,7 +8,7 @@ import migrationSource from "../../supabase/migrations/202608220006_idempotent_f
 import authStoreSource from "../stores/authStore.ts?raw";
 import appSource from "../App.tsx?raw";
 import authPagesSource from "../pages/AuthPages.tsx?raw";
-import httpSource from "../../supabase/functions/_shared/http.ts?raw";
+import corsPolicySource from "../../supabase/functions/_shared/corsPolicy.ts?raw";
 import { needsFirstLogin } from "./authPolicy";
 import type { Profile } from "../types/domain";
 
@@ -97,8 +97,8 @@ describe("recoverable first-login orchestration", () => {
   });
 
   it("normalizes a pathful GitHub Pages URL before comparing browser Origin", () => {
-    expect(httpSource).toContain("new URL(configured).origin");
-    expect(httpSource).not.toContain("origin === configured ? origin : null");
+    expect(corsPolicySource).toContain("new URL(configuredFrontendUrl).origin");
+    expect(corsPolicySource).not.toContain("requestOrigin === configuredFrontendUrl");
   });
 
   it("uses structured allowlisted logs without credentials, JWTs, or key material", () => {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import adminSource from "../services/admin.ts?raw";
 import projectsSource from "../services/projects.ts?raw";
 import authStoreSource from "../stores/authStore.ts?raw";
+import accessLogSource from "../services/accessLogs.ts?raw";
 import helperSource from "./authenticatedFunction.ts?raw";
 import {
   AuthenticatedFunctionError,
@@ -154,7 +155,7 @@ describe("authenticated Edge Function invocation", () => {
   });
 
   it("routes every protected application Function through the same helper", () => {
-    const applicationSources = `${adminSource}\n${projectsSource}\n${authStoreSource}`;
+    const applicationSources = `${adminSource}\n${projectsSource}\n${authStoreSource}\n${accessLogSource}`;
     for (const functionName of [
       "admin-create-user",
       "admin-list-users",
@@ -166,7 +167,9 @@ describe("authenticated Edge Function invocation", () => {
       "remove-project-member",
       "github-retry",
       "delete-github-repository",
-      "complete-first-login"
+      "complete-first-login",
+      "record-access-event",
+      "admin-list-access-logs"
     ]) {
       expect(applicationSources).toContain(`"${functionName}"`);
     }

@@ -4,6 +4,7 @@ import adminPolicySql from "../../supabase/migrations/202608220002_admin_account
 import explicitGrantsSql from "../../supabase/migrations/202608220003_explicit_data_api_grants.sql?raw";
 import bootstrapSql from "../../supabase/migrations/202608220004_system_admin_bootstrap.sql?raw";
 import recoveryBootstrapSql from "../../supabase/migrations/202608220005_recoverable_system_admin_bootstrap.sql?raw";
+import accessLogSql from "../../supabase/migrations/202608220007_admin_project_access_logs.sql?raw";
 
 const authenticatedPrivileges = {
   profiles: ["select", "update"],
@@ -69,5 +70,15 @@ describe("Supabase Data API authorization contract", () => {
       expect(recoverySql).toContain(`revoke all on function public.${signature} from public, anon, authenticated;`);
       expect(recoverySql).toContain(`grant execute on function public.${signature} to service_role;`);
     }
+  });
+
+  it("keeps access logs behind service-role RPCs with RLS and no browser table grants", () => {
+    const sql = accessLogSql.toLowerCase();
+    expect(sql).toContain("alter table public.user_access_logs enable row level security;");
+    expect(sql).toContain("revoke all privileges on table public.user_access_logs from public, anon, authenticated;");
+    expect(sql).toContain("grant select, insert, delete on table public.user_access_logs to service_role;");
+    expect(sql).not.toMatch(/grant\s+[\s\S]*?user_access_logs[\s\S]*?\s+to\s+(anon|authenticated)\s*;/iu);
+    expect(sql).toContain("revoke all on function public.list_auth_audit_logs_admin");
+    expect(sql).toContain("to service_role;");
   });
 });
