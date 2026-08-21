@@ -9,6 +9,7 @@ import {
 } from "../crypto";
 import { deriveAuthCredential } from "../../supabase/functions/_shared/authCredential";
 import { needsFirstLogin } from "../lib/authPolicy";
+import { AuthenticatedFunctionError, invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 import { supabase } from "../lib/supabase";
 import { studentIdToInternalEmail } from "../lib/utils";
 import type { Profile } from "../types/domain";
@@ -76,14 +77,19 @@ interface FirstLoginCompletion {
 async function invokeFirstLoginCompletion(authCredential: string, record: UserKeyringRecord): Promise<FirstLoginCompletion> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const { data, error } = await supabase.functions.invoke<FirstLoginCompletion>("complete-first-login", {
+      const data = await invokeAuthenticatedFunction<FirstLoginCompletion>("complete-first-login", {
         body: {
           derivedCredential: authCredential,
           keyring: record
-        }
+        },
+        fallbackMessage: "최초 로그인 상태를 완료할 수 없습니다."
       });
-      if (!error && data?.completed === true) return data;
-    } catch {
+      if (data.completed === true) return data;
+    } catch (error) {
+      if (
+        error instanceof AuthenticatedFunctionError
+        && (error.code.startsWith("AUTH_SESSION_") || error.status === 401)
+      ) throw error;
       // 응답 유실도 부분 성공일 수 있으므로 같은 요청을 즉시 한 번 재시도한다.
     }
   }

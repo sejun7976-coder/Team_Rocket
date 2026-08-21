@@ -1,4 +1,5 @@
 import { createProjectKey, wrapExistingProjectKey } from "../crypto";
+import { invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 import { supabase } from "../lib/supabase";
 import type { Profile, Project, ProjectMember, ProjectRole } from "../types/domain";
 import { useAuthStore } from "../stores/authStore";
@@ -26,7 +27,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   const projectId = crypto.randomUUID();
   const idempotencyKey = crypto.randomUUID();
   const generated = await createProjectKey(profile.encryption_public_key, projectId, user.id);
-  const { data, error } = await supabase.functions.invoke("create-project", {
+  const data = await invokeAuthenticatedFunction<{ project: Project }>("create-project", {
     headers: { "X-Idempotency-Key": idempotencyKey },
     body: {
       ...input,
@@ -36,11 +37,11 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
         wrappedKey: generated.wrapped.wrappedKey,
         ephemeralPublicKey: generated.wrapped.ephemeralPublicKey
       }
-    }
+    },
+    fallbackMessage: "프로젝트를 생성할 수 없습니다."
   });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "프로젝트를 생성할 수 없습니다.");
   useProjectKeyStore.getState().remember(projectId, generated.projectKey);
-  return (data as { project: Project }).project;
+  return data.project;
 }
 
 export async function getProject(projectId: string): Promise<Project> {
@@ -72,24 +73,24 @@ export async function addProjectMember(
   if (!target.encryption_public_key) throw new Error("대상 사용자의 암호화 keyring이 아직 설정되지 않았습니다.");
   const projectKey = await useProjectKeyStore.getState().unlock(projectId);
   const wrapped = await wrapExistingProjectKey(projectKey, target.encryption_public_key, projectId, target.id);
-  const { data, error } = await supabase.functions.invoke("sync-project-member", {
+  const data = await invokeAuthenticatedFunction<{ member: ProjectMember }>("sync-project-member", {
     body: {
       projectId,
       userId: target.id,
       role,
       wrappedKey: wrapped.wrappedKey,
       ephemeralPublicKey: wrapped.ephemeralPublicKey
-    }
+    },
+    fallbackMessage: "팀원을 추가할 수 없습니다."
   });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "팀원을 추가할 수 없습니다.");
-  return (data as { member: ProjectMember }).member;
+  return data.member;
 }
 
 export async function rewrapProjectMemberKey(projectId: string, target: Pick<Profile, "id" | "encryption_public_key">): Promise<void> {
   if (!target.encryption_public_key) throw new Error("대상 사용자가 비밀번호 변경과 keyring 설정을 먼저 완료해야 합니다.");
   const projectKey = await useProjectKeyStore.getState().unlock(projectId);
   const wrapped = await wrapExistingProjectKey(projectKey, target.encryption_public_key, projectId, target.id);
-  const { data, error } = await supabase.functions.invoke("sync-project-member", {
+  await invokeAuthenticatedFunction("sync-project-member", {
     body: {
       projectId,
       userId: target.id,
@@ -97,15 +98,16 @@ export async function rewrapProjectMemberKey(projectId: string, target: Pick<Pro
       preserveMembership: true,
       wrappedKey: wrapped.wrappedKey,
       ephemeralPublicKey: wrapped.ephemeralPublicKey
-    }
+    },
+    fallbackMessage: "프로젝트 암호화 키를 다시 공유할 수 없습니다."
   });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "프로젝트 암호화 키를 다시 공유할 수 없습니다.");
 }
 
 export async function removeProjectMember(projectId: string, userId: string): Promise<{ githubSyncStatus: string; githubErrorCode: string | null }> {
-  const { data, error } = await supabase.functions.invoke("remove-project-member", { body: { projectId, userId } });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "팀원을 제거할 수 없습니다.");
-  return data as { githubSyncStatus: string; githubErrorCode: string | null };
+  return invokeAuthenticatedFunction("remove-project-member", {
+    body: { projectId, userId },
+    fallbackMessage: "팀원을 제거할 수 없습니다."
+  });
 }
 
 export async function updateProject(projectId: string, updates: Partial<Pick<Project, "name" | "description" | "github_auto_sync" | "status">>): Promise<Project> {
@@ -115,19 +117,23 @@ export async function updateProject(projectId: string, updates: Partial<Pick<Pro
 }
 
 export async function deleteGitHubRepository(projectId: string, confirmation: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke("delete-github-repository", { body: { projectId, confirmation } });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "GitHub Repository를 삭제할 수 없습니다.");
+  await invokeAuthenticatedFunction("delete-github-repository", {
+    body: { projectId, confirmation },
+    fallbackMessage: "GitHub Repository를 삭제할 수 없습니다."
+  });
 }
 
 export async function retryGitHubMemberSync(projectId: string, userId: string, action: "add_collaborator" | "remove_collaborator"): Promise<void> {
-  const { data, error } = await supabase.functions.invoke("github-retry", { body: { projectId, userId, action } });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "GitHub 동기화를 재시도할 수 없습니다.");
+  await invokeAuthenticatedFunction("github-retry", {
+    body: { projectId, userId, action },
+    fallbackMessage: "GitHub 동기화를 재시도할 수 없습니다."
+  });
 }
 
 export async function retryGitHubRepositoryCreation(projectId: string): Promise<Project> {
-  const { data, error } = await supabase.functions.invoke("github-retry", {
-    body: { projectId, action: "create_repository" }
+  const data = await invokeAuthenticatedFunction<{ project: Project }>("github-retry", {
+    body: { projectId, action: "create_repository" },
+    fallbackMessage: "GitHub Repository 생성을 재시도할 수 없습니다."
   });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "GitHub Repository 생성을 재시도할 수 없습니다.");
-  return (data as { project: Project }).project;
+  return data.project;
 }

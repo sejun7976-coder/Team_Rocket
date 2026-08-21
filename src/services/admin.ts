@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 import type { AccountStatus, SystemRole } from "../types/domain";
 
 export type AdminUserStatus = "initial_login_pending" | "password_change_required" | "active" | "inactive";
@@ -34,9 +34,10 @@ export interface AdminProject {
 }
 
 async function invokeAdmin<T>(functionName: string, body: Record<string, unknown> = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(functionName, { body });
-  if (error) throw new Error((data as { error?: string } | null)?.error ?? "관리자 요청을 처리할 수 없습니다.");
-  return data as T;
+  return invokeAuthenticatedFunction<T>(functionName, {
+    body,
+    fallbackMessage: "관리자 요청을 처리할 수 없습니다."
+  });
 }
 
 export async function listAdminUsers(): Promise<AdminUser[]> {

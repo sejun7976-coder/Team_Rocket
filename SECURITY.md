@@ -20,6 +20,8 @@ UI는 학번을 받지만 Supabase Auth에는 정규식 검증한 학번을 dete
 
 최초 로그인 완료는 Browser가 생성한 암호화 keyring과 derived Auth credential만 `complete-first-login`에 보내고, Edge Function이 Auth password → 원자적 profile/keyring RPC → Auth metadata 순서로 조정한다. 원문 PIN/비밀번호는 Browser 밖으로 전송하지 않는다. Auth password만 먼저 변경된 partial 상태에서는 같은 새 PIN으로 재시도하며 `same_password`를 이전 단계 성공으로 처리한다. 로그에는 user UUID, phase, allowlist 오류 코드, 완료 flag만 남기고 원문/derived credential, JWT, private key, salt를 남기지 않는다.
 
+로그인 사용자가 호출하는 모든 protected Edge Function은 공통 authenticated invoke helper를 통과한다. Helper는 호출 직전 Auth session을 읽고 만료·이상 상태이면 한 번만 refresh한 뒤 현재 access token을 `Authorization: Bearer`로 명시한다. 세션이 없으면 네트워크 요청 전에 차단한다. Gateway와 Function 오류에서는 allowlist code와 호출별 일반 메시지만 보존하며 access token/JWT나 응답 원문을 로그·UI·telemetry에 전달하지 않는다. Edge Gateway의 JWT 검증과 Function 내부 `requireUser()` 검증은 모두 유지한다.
+
 ## Project key V1 정책
 
 - Project마다 `crypto.getRandomValues`로 생성한 256-bit DEK를 사용한다.
