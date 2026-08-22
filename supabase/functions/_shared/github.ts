@@ -4,30 +4,37 @@ import {
   GitHubClientError,
   type GitHubConfiguration,
   type GitHubRepository,
-  isRepositoryForProject as matchesProjectRepository,
-  normalizeProjectManagerUrl
+  isRepositoryForProject as matchesProjectRepository
 } from "./githubClient.ts";
+import {
+  GitHubConfigurationError,
+  githubConfigurationDiagnostic,
+  resolveGitHubConfiguration,
+  type GitHubConfigurationInput
+} from "./githubConfiguration.ts";
 import { GITHUB_USER_PATTERN } from "./validation.ts";
 
 function configuration(): GitHubConfiguration {
-  const token = Deno.env.get("GITHUB_TOKEN")?.trim();
-  const owner = Deno.env.get("GITHUB_OWNER")?.trim();
-  const rawType = Deno.env.get("GITHUB_OWNER_TYPE")?.trim() ?? "user";
-  const configuredProjectManagerUrl = Deno.env.get("PROJECT_MANAGER_URL")?.trim();
-  const hosted = Boolean(Deno.env.get("DENO_DEPLOYMENT_ID"))
-    || Deno.env.get("SUPABASE_URL")?.startsWith("https://") === true;
-  const projectManagerUrl = normalizeProjectManagerUrl(
-    configuredProjectManagerUrl || (hosted ? "" : "http://127.0.0.1:3000")
-  );
-  if (
-    !token || !owner || !GITHUB_USER_PATTERN.test(owner)
-    || !["user", "organization"].includes(rawType)
-    || !projectManagerUrl
-    || (hosted && (!configuredProjectManagerUrl || !projectManagerUrl.startsWith("https://")))
-  ) {
-    throw new ApiError(500, "GITHUB_CONFIGURATION_ERROR", "GitHub Edge Function Secret 설정이 올바르지 않습니다.");
+  const input: GitHubConfigurationInput = {
+    token: Deno.env.get("GITHUB_TOKEN"),
+    owner: Deno.env.get("GITHUB_OWNER"),
+    ownerType: Deno.env.get("GITHUB_OWNER_TYPE"),
+    projectManagerUrl: Deno.env.get("PROJECT_MANAGER_URL"),
+    hosted: Boolean(Deno.env.get("DENO_DEPLOYMENT_ID"))
+      || Deno.env.get("SUPABASE_URL")?.startsWith("https://") === true
+  };
+  try {
+    return resolveGitHubConfiguration(input);
+  } catch (error) {
+    console.info(JSON.stringify({
+      event: "github_configuration_check",
+      ...githubConfigurationDiagnostic(input)
+    }));
+    if (error instanceof GitHubConfigurationError) {
+      throw new ApiError(500, error.code, error.message);
+    }
+    throw new ApiError(500, "GITHUB_CONFIGURATION_ERROR", "GitHub Edge Function Secret 설정을 확인할 수 없습니다.");
   }
-  return { token, owner, ownerType: rawType as "user" | "organization", projectManagerUrl };
 }
 
 function template(): { owner: string; repository: string } | undefined {

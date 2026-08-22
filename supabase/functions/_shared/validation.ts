@@ -1,8 +1,8 @@
 import { ApiError } from "./http.ts";
+export { GITHUB_USER_PATTERN } from "./githubUsername.ts";
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 export const REPOSITORY_PATTERN = /^[A-Za-z0-9._-]{1,100}$/u;
-export const GITHUB_USER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 
 export function requireUuid(value: unknown, field: string): string {
   if (typeof value !== "string" || !UUID_PATTERN.test(value)) throw new ApiError(400, "INVALID_INPUT", `${field}가 올바르지 않습니다.`);

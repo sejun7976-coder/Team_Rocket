@@ -75,6 +75,16 @@ describe("GitHub Repository client", () => {
     }
   });
 
+  it("maps GitHub GET /user 401 to GITHUB_AUTH_FAILED", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 401 }));
+    const client = new GitHubClient({ token: fakeToken, owner, ownerType: "user", projectManagerUrl }, fetcher);
+
+    await expect(client.verifyConfiguredOwner()).rejects.toMatchObject({
+      status: 502,
+      code: "GITHUB_AUTH_FAILED"
+    });
+  });
+
   it("recognizes only repositories carrying the matching project idempotency marker", () => {
     const matching = repository();
     const different = repository({ homepage: projectRepositoryMarker(projectManagerUrl, "20000000-0000-4000-8000-000000000001") });

@@ -7,15 +7,17 @@
 다음 값은 Supabase Edge Function secret으로만 등록한다.
 
 ```bash
-npx supabase secrets set GITHUB_TOKEN=<TOKEN>
-npx supabase secrets set GITHUB_OWNER=<USER_OR_ORG>
-npx supabase secrets set GITHUB_OWNER_TYPE=user
-npx supabase secrets set PROJECT_MANAGER_URL=https://sejun7976-coder.github.io/Team_Rocket
+npx supabase secrets set GITHUB_TOKEN=<TOKEN> --project-ref joljmlyzhlwrlnbunusb
+npx supabase secrets set GITHUB_OWNER=sejun7976-coder --project-ref joljmlyzhlwrlnbunusb
+npx supabase secrets set GITHUB_OWNER_TYPE=user --project-ref joljmlyzhlwrlnbunusb
+npx supabase secrets set PROJECT_MANAGER_URL=https://sejun7976-coder.github.io/Team_Rocket --project-ref joljmlyzhlwrlnbunusb
 ```
 
 현재 Hosted 프로젝트의 설정은 `GITHUB_OWNER=sejun7976-coder`, `GITHUB_OWNER_TYPE=user`, `PROJECT_MANAGER_URL=https://sejun7976-coder.github.io/Team_Rocket`이다. `GITHUB_TOKEN` 값은 source, 문서, 응답, 로그에 기록하지 않는다. Function은 실행 시 Secret을 `Deno.env.get()`으로 읽고, `GET /user` 결과가 설정된 Owner와 일치하는지 확인한 뒤에만 Repository를 생성한다.
 
 Repository idempotency marker는 `${PROJECT_MANAGER_URL}/#/projects/${projectId}`다. Hosted 환경에서는 `PROJECT_MANAGER_URL`이 없거나 HTTPS URL이 아니면 fail closed한다. 로컬 개발환경에서만 값이 없을 때 `http://127.0.0.1:3000`을 marker base로 사용한다. 운영 중 URL을 변경하면 기존 Repository marker와 달라질 수 있으므로 이 값을 안정적으로 유지한다.
+
+설정 실패는 `GITHUB_TOKEN_MISSING`, `GITHUB_OWNER_MISSING`, `GITHUB_OWNER_INVALID`, `GITHUB_OWNER_TYPE_INVALID`, `PROJECT_MANAGER_URL_MISSING`, `PROJECT_MANAGER_URL_INVALID`로 구분한다. Function log에는 각 설정의 존재/유효 여부 boolean만 기록하며 Secret 값과 Owner 문자열은 기록하지 않는다. 설정을 확인할 때도 target 혼동을 막기 위해 `npx supabase secrets list --project-ref joljmlyzhlwrlnbunusb`를 사용한다.
 
 Organization이면 `GITHUB_OWNER_TYPE=organization`을 사용하고 조직 정책에서 repository 생성과 outside collaborator 초대를 허용해야 한다.
 
