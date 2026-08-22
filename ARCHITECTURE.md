@@ -2,9 +2,9 @@
 
 ## 목표
 
-Team Rocket은 5~10명의 대학생이 3~4개 프로젝트를 관리하는 AI 중심 SPA다. GitHub Pages에는 정적 React bundle만 배포하고, 인증·업무 데이터·권한·Realtime·파일은 Supabase가 담당한다. GitHub는 선택형 보조 통합이며 Supabase Edge Functions만 credential을 보유하고 repository 생성과 collaborator 동기화를 수행한다.
+Team Rocket은 대학생과 소규모 팀이 작업, 일정, 파일, 진행 상황을 한곳에서 관리하는 프로젝트 관리 SPA다. GitHub Pages에는 정적 React bundle만 배포하고, 인증·업무 데이터·권한·Realtime·파일은 Supabase가 담당한다. GitHub는 선택형 보조 연동이며 Supabase Edge Functions만 GitHub 인증 정보를 보유하고 저장소 생성과 팀원 권한 동기화를 수행한다.
 
-현재 Files v1은 암호화된 가상 폴더·검색·정렬·필터에 집중한다. 파일 versioning은 기존 Storage object와 암호화 envelope를 바꾸지 않는 별도 metadata 설계로 후속 작업한다. Rocket AI에는 파일명·형식·크기·연결 Task·업로드 시각만 전달하며, 문서 본문은 향후 사용자가 명시적으로 "AI로 요약"을 실행하고 전송을 확인하는 흐름에서만 지원한다.
+Files는 암호화된 가상 폴더·검색·정렬·필터에 집중한다. 파일 버전 관리는 기존 Storage object와 암호화 envelope를 바꾸지 않는 별도 metadata 설계로 후속 작업한다.
 
 ```text
 GitHub Pages (HashRouter SPA)
@@ -70,13 +70,7 @@ bucket은 private `project-files`이며 object path는 `{projectId}/{fileId}/enc
 
 Task 첨부도 별도 버킷을 만들지 않고 `files.task_id`로 같은 암호화 파일 시스템에 연결한다. Task 생성은 browser가 설명 ciphertext를 만든 후 `create_task_atomic` RPC가 Task와 중복 제거된 담당자를 한 transaction에 저장한다. Task가 성공한 뒤 각 첨부를 암호화·업로드하므로 일부 첨부 실패가 Task 생성 자체를 되돌리지 않는다.
 
-## Rocket AI
-
-Browser는 현재 사용자가 복호화해 이미 볼 수 있는 업무 정보 중 사용자가 명시적으로 요청한 최소 context만 `ai-assistant`에 보낸다. Project DEK, keyring, PIN/password, JWT, GitHub token과 attachment bytes는 prompt에 포함하지 않는다. Edge Function은 membership을 다시 확인하고 OpenAI Responses API에 structured output을 요청한다. AI가 반환한 Task proposal은 화면에서 확인한 뒤에만 기존 `createTask` service를 호출한다.
-
-`ai_provider_settings`와 `ai_usage_logs`는 anon/authenticated Data API 권한이 없고 service role Edge Function만 접근한다. system admin이 입력한 provider key는 `AI_CONFIG_MASTER_KEY`에서 가져온 server-only AES-GCM key로 암호화해 저장하며 GET 응답은 configured 여부만 반환한다. Usage log는 prompt/content 없이 user/project/feature/model/token/latency metadata만 기록한다.
-
-프로젝트 영구 삭제는 Owner 확인 → GitHub marker 검증 → Repository 삭제(404는 완료로 간주) → private Storage object 삭제 → Project row 삭제 순서다. 마지막 Project 삭제가 child FK cascade를 실행하며 AI usage의 project reference는 비용 감사 보존을 위해 `NULL`로 바뀐다.
+프로젝트 영구 삭제는 소유자 확인 → GitHub marker 검증 → 저장소 삭제(404는 완료로 간주) → private Storage object 삭제 → 프로젝트 row 삭제 순서다. 마지막 프로젝트 삭제가 child FK cascade를 실행한다.
 
 ## 프런트엔드 경계
 

@@ -61,6 +61,8 @@ import type {
   Task,
 } from "../types/domain";
 import { formatBytes } from "../lib/utils";
+import { MAX_FILE_SIZE_LABEL } from "../lib/filePolicy";
+import { activityLabel, githubErrorMessage, githubSyncStatusLabels, projectRoleLabels, taskStatusLabels } from "../lib/display";
 import { useProjectContext } from "./ProjectPages";
 import {
   Alert,
@@ -74,20 +76,6 @@ import {
   Spinner,
 } from "../components/ui";
 import { useProjectKeyStore } from "../stores/projectKeyStore";
-
-const activityLabels: Record<string, string> = {
-  project_created: "프로젝트를 생성했습니다.",
-  member_added: "팀원을 추가했습니다.",
-  member_removed: "팀원을 제거했습니다.",
-  task_created: "작업을 생성했습니다.",
-  task_status_changed: "작업 상태를 변경했습니다.",
-  task_progress_changed: "진행률을 변경했습니다.",
-  task_due_date_changed: "마감일을 변경했습니다.",
-  assignee_added: "담당자를 추가했습니다.",
-  assignee_removed: "담당자를 제거했습니다.",
-  comment_created: "댓글을 작성했습니다.",
-  file_uploaded: "파일을 업로드했습니다.",
-};
 
 export function ProjectCalendarPage() {
   const { project } = useProjectContext();
@@ -133,7 +121,7 @@ export function ProjectCalendarPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Calendar"
+        eyebrow="캘린더"
         title="프로젝트 일정"
         description={`오늘 마감 ${dated.filter((task) => task.due_date === today && task.status !== "done").length}개 · 이번 주 ${thisWeek.length}개 · 지연 ${overdue.length}개`}
         action={
@@ -145,16 +133,18 @@ export function ProjectCalendarPage() {
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${mode === item ? "bg-brand text-white" : "text-muted"}`}
               >
                 {item === "month"
-                  ? "Month"
+                  ? "월"
                   : item === "week"
-                    ? "Week"
-                    : "Agenda"}
+                    ? "주"
+                    : "일정 목록"}
               </button>
             ))}
           </div>
         }
       />
-      {tasks.isLoading ? (
+      {tasks.error ? (
+        <Alert>일정을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void tasks.refetch()}>다시 시도</Button></Alert>
+      ) : tasks.isLoading ? (
         <Spinner />
       ) : (
         <div className="panel overflow-hidden">
@@ -275,7 +265,7 @@ export function ProjectCalendarPage() {
                     <div className="flex-1 text-sm font-semibold text-ink">
                       {task.title}
                     </div>
-                    <Badge>{task.status}</Badge>
+                    <Badge>{taskStatusLabels[task.status]}</Badge>
                   </div>
                 ))}
             </div>
@@ -379,9 +369,9 @@ export function ProjectFilesPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Encrypted storage"
+        eyebrow="파일"
         title="파일"
-        description="원본 파일과 파일명은 브라우저에서 프로젝트 key로 암호화한 후 private Storage에 저장합니다."
+        description="프로젝트에 필요한 파일을 폴더별로 업로드하고 관리합니다."
         action={role !== "viewer" ? (
           <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white">
             <Upload size={16} /> 파일 업로드
@@ -398,6 +388,7 @@ export function ProjectFilesPage() {
         ) : undefined}
       />
       <div className="panel mb-4 p-4">
+        <p className="mb-3 text-xs text-muted">파일당 최대 {MAX_FILE_SIZE_LABEL} · 실행 파일 제외</p>
         <div className="flex flex-wrap items-center gap-2">
           {role !== "viewer" && <Button variant="secondary" size="sm" onClick={() => setFolderOpen(true)}><FolderPlus size={14} /> 새 폴더</Button>}
           <div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-2.5 text-muted" size={15} /><Input className="h-9 pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="파일 이름 검색" /></div>
@@ -428,65 +419,46 @@ export function ProjectFilesPage() {
           </div>
         </div>
       )}
-      {files.isLoading || folders.isLoading ? (
+      {files.error || folders.error ? (
+        <Alert>파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => { void files.refetch(); void folders.refetch(); }}>다시 시도</Button></Alert>
+      ) : files.isLoading || folders.isLoading ? (
         <Spinner />
       ) : visibleFiles.length ? (
         <div className="panel divide-y divide-line overflow-hidden">
+          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_minmax(7rem,1fr)_7rem_auto] gap-3 bg-raised px-4 py-3 text-xs font-semibold text-muted xl:grid">
+            <span>파일명</span><span>폴더</span><span>연결된 작업</span><span>크기</span><span>업로더</span><span>업로드 날짜</span><span className="text-right">메뉴</span>
+          </div>
           {visibleFiles.map((file) => (
             <div
               key={file.id}
-              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+              className="grid gap-3 p-4 xl:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_minmax(7rem,1fr)_7rem_auto] xl:items-center"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                <File size={19} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <button
-                  className="max-w-full truncate text-left text-sm font-bold text-ink hover:text-brand"
-                  onClick={() => void download(file, true)}
-                >
-                  {file.filename}
-                </button>
-                <div className="mt-1 text-[11px] text-muted">
-                  {formatBytes(file.original_size)} ·{" "}
-                  {file.uploader?.name ?? "사용자"} ·{" "}
-                  {new Date(file.created_at).toLocaleString("ko-KR")}
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                  <File size={19} />
                 </div>
-                <div className="mt-1 text-[11px] text-muted">연결된 작업: {file.task ? <Link to={`/tasks/${file.task.id}`} className="font-semibold text-brand hover:underline">{file.task.title}</Link> : "-"}</div>
+                <div className="min-w-0">
+                  <button className="block max-w-full truncate text-left text-sm font-bold text-ink hover:text-brand" title={file.filename} onClick={() => void download(file, true)}>{file.filename}</button>
+                  <p className="mt-1 text-[11px] text-muted xl:hidden">{formatBytes(file.original_size)} · {file.uploader?.name ?? "사용자"} · {new Date(file.created_at).toLocaleDateString("ko-KR")}</p>
+                </div>
               </div>
-              {(file.uploaded_by === user?.id || role === "owner" || role === "admin") && <select aria-label={`${file.filename ?? "파일"} 폴더 이동`} className="field h-8 w-auto max-w-36 text-xs" value={file.folder_id ?? ""} onChange={async (event) => { await moveProjectFile(file.id, event.target.value || null); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); }}><option value="">폴더 없음</option>{folders.data?.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void download(file)}
-              >
-                <Download size={14} /> 다운로드
-              </Button>
-              {(file.uploaded_by === user?.id || role === "owner" || role === "admin") && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600"
-                  onClick={async () => {
-                    if (confirm("파일을 삭제할까요?")) {
-                      await deleteProjectFile(file);
-                      await queryClient.invalidateQueries({
-                        queryKey: ["files", project.id],
-                      });
-                    }
-                  }}
-                >
-                  <Trash2 size={14} /> 삭제
-                </Button>
-              )}
+              <div>{file.uploaded_by === user?.id || role === "owner" || role === "admin" ? <select aria-label={`${file.filename ?? "파일"} 폴더 이동`} className="field h-8 w-full text-xs" value={file.folder_id ?? ""} onChange={async (event) => { await moveProjectFile(file.id, event.target.value || null); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); }}><option value="">폴더 없음</option>{folders.data?.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select> : <span className="text-xs text-muted">{folders.data?.find((folder) => folder.id === file.folder_id)?.name ?? "폴더 없음"}</span>}</div>
+              <div className="min-w-0 text-xs text-muted">{file.task ? <Link to={`/tasks/${file.task.id}`} className="block truncate font-semibold text-brand hover:underline">{file.task.title}</Link> : "연결된 작업 없음"}</div>
+              <span className="hidden text-xs text-muted xl:block">{formatBytes(file.original_size)}</span>
+              <span className="hidden truncate text-xs text-muted xl:block">{file.uploader?.name ?? "사용자"}</span>
+              <span className="hidden text-xs text-muted xl:block">{new Date(file.created_at).toLocaleDateString("ko-KR")}</span>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="secondary" size="sm" onClick={() => void download(file)}><Download size={14} /> 다운로드</Button>
+                {(file.uploaded_by === user?.id || role === "owner" || role === "admin") && <Button variant="ghost" size="sm" className="text-red-600" onClick={async () => { if (confirm("파일을 삭제할까요?")) { await deleteProjectFile(file); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); } }}><Trash2 size={14} /> 삭제</Button>}
+              </div>
             </div>
           ))}
         </div>
       ) : (
         <EmptyState
           icon={<Upload />}
-          title="공유 파일이 없습니다"
-          description="50 MiB 이하 파일을 업로드하면 원본이 브라우저 밖으로 나가기 전에 AES-256-GCM으로 암호화됩니다."
+          title="파일이 없습니다"
+          description="프로젝트에 필요한 파일을 업로드해 보세요."
         />
       )}
       <Modal
@@ -519,7 +491,7 @@ export function ProjectFilesPage() {
           )
         )}
       </Modal>
-      <Modal open={folderOpen} onClose={() => setFolderOpen(false)} title="새 폴더" description="폴더 이름도 프로젝트 key로 암호화됩니다.">
+      <Modal open={folderOpen} onClose={() => setFolderOpen(false)} title="새 폴더" description="프로젝트 파일을 정리할 폴더를 만듭니다.">
         {createFolder.error && <Alert className="mb-3">{createFolder.error.message}</Alert>}
         <form onSubmit={(event) => { event.preventDefault(); createFolder.mutate(); }}><label className="label" htmlFor="folder-name">폴더 이름</label><Input id="folder-name" value={folderName} onChange={(event) => setFolderName(event.target.value)} maxLength={80} required autoFocus /><div className="mt-4 flex justify-end gap-2"><Button variant="secondary" onClick={() => setFolderOpen(false)}>취소</Button><Button type="submit" disabled={!folderName.trim() || createFolder.isPending}>만들기</Button></div></form>
       </Modal>
@@ -536,13 +508,15 @@ export function ProjectActivityPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Audit trail"
+        eyebrow="활동"
         title="프로젝트 활동"
-        description="보안 및 협업 변경을 시간순으로 기록합니다."
+        description="프로젝트의 주요 변경 내용을 시간순으로 확인합니다."
       />
-      {activities.isLoading ? (
+      {activities.error ? (
+        <Alert>활동을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void activities.refetch()}>다시 시도</Button></Alert>
+      ) : activities.isLoading ? (
         <Spinner />
-      ) : (
+      ) : activities.data?.length ? (
         <div className="panel divide-y divide-line">
           {activities.data?.map((activity) => (
             <div key={activity.id} className="flex gap-3 p-4">
@@ -554,7 +528,7 @@ export function ProjectActivityPage() {
               <div>
                 <p className="text-sm text-ink">
                   <strong>{activity.actor?.name ?? "시스템"}</strong>님이{" "}
-                  {activityLabels[activity.action] ?? activity.action}
+                  {activityLabel(activity.action)}
                 </p>
                 <p className="mt-1 text-[11px] text-muted">
                   {new Date(activity.created_at).toLocaleString("ko-KR")}
@@ -563,6 +537,8 @@ export function ProjectActivityPage() {
             </div>
           ))}
         </div>
+      ) : (
+        <EmptyState icon={<RefreshCw />} title="활동 기록이 없습니다" description="프로젝트에서 변경한 내용이 생기면 여기에 표시됩니다." />
       )}
     </div>
   );
@@ -622,9 +598,9 @@ function AddMemberDialog({
             setRole(event.target.value as Exclude<ProjectRole, "owner">)
           }
         >
-          <option value="member">Member</option>
-          <option value="admin">Admin</option>
-          <option value="viewer">Viewer</option>
+          <option value="member">팀원</option>
+          <option value="admin">관리자</option>
+          <option value="viewer">열람자</option>
         </select>
       </div>
       {mutation.error && (
@@ -653,7 +629,7 @@ function AddMemberDialog({
               disabled={mutation.isPending || !profile.encryption_public_key}
               title={
                 !profile.encryption_public_key
-                  ? "대상 사용자가 먼저 로그인해 keyring을 만들어야 합니다."
+                  ? "대상 사용자가 먼저 로그인해 보안 설정을 완료해야 합니다."
                   : undefined
               }
               onClick={() => mutation.mutate(profile)}
@@ -704,9 +680,9 @@ export function ProjectTeamPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Team"
+        eyebrow="팀"
         title="팀 관리"
-        description="멤버 추가 즉시 RLS 접근과 member-specific project key가 함께 생성됩니다."
+        description="프로젝트 팀원과 역할을 관리합니다."
         action={
           canManage && (
             <Button onClick={() => setAddOpen(true)}>
@@ -722,7 +698,7 @@ export function ProjectTeamPage() {
       )}
       {rewrap.isSuccess && (
         <Alert tone="success" className="mb-4">
-          프로젝트 암호화 키를 다시 공유했습니다.
+           프로젝트 접근 권한을 복구했습니다.
         </Alert>
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -750,7 +726,7 @@ export function ProjectTeamPage() {
                   </div>
                 </div>
                 <Badge tone={member.role === "owner" ? "purple" : "neutral"}>
-                  {member.role}
+                  {projectRoleLabels[member.role]}
                 </Badge>
               </div>
               <div className="mt-5 grid grid-cols-3 gap-2 text-center">
@@ -767,7 +743,7 @@ export function ProjectTeamPage() {
                   <div className="text-lg font-extrabold text-ink">
                     {assigned.filter((task) => task.status === "todo").length}
                   </div>
-                  <div className="text-[10px] text-muted">TODO</div>
+                  <div className="text-[10px] text-muted">할 일</div>
                 </div>
                 <div className="subtle-panel p-2">
                   <div className="text-lg font-extrabold text-ink">
@@ -781,7 +757,7 @@ export function ProjectTeamPage() {
                   {member.profile?.github_username ? (
                     <span className="text-emerald-600">
                       @{member.profile.github_username} ·{" "}
-                      {member.github_sync_status}
+                      {githubSyncStatusLabels[member.github_sync_status]}
                     </span>
                   ) : (
                     "GitHub 계정 미연결"
@@ -799,11 +775,11 @@ export function ProjectTeamPage() {
                       title={
                         !member.profile?.encryption_public_key
                           ? "사용자가 최초 비밀번호 변경을 완료해야 합니다."
-                          : "비밀번호 초기화 후 새 public key로 DEK를 다시 wrapping합니다."
+                          : "비밀번호 초기화 후 프로젝트 접근 권한을 다시 복구합니다."
                       }
                       onClick={() => rewrap.mutate(member)}
                     >
-                      <RefreshCw size={14} /> 암호화 키 재공유
+                      <RefreshCw size={14} /> 프로젝트 접근 복구
                     </Button>
                     {member.role !== "owner" && (
                       <Button
@@ -827,8 +803,7 @@ export function ProjectTeamPage() {
               </div>
               {member.github_sync_status === "error" && (
                 <Alert className="mt-3">
-                  사이트 권한은 적용됐지만 GitHub 동기화에 실패했습니다:{" "}
-                  {member.github_error_code}
+                  프로젝트 권한은 적용됐지만 GitHub 연동에 실패했습니다. {githubErrorMessage(member.github_error_code)}
                 </Alert>
               )}
             </div>
@@ -905,15 +880,15 @@ function GitHubIntegrationSection() {
     repositoryStatus.data?.repositoryUrl ?? project.github_repository_url;
   const actionLabel =
     state === "missing"
-      ? "Repository 생성"
+      ? "저장소 만들기"
       : state === "recoverable"
-        ? "Repository 연결 복구"
+        ? "저장소 다시 연결"
         : state === "conflict"
-          ? "Repository 확인 필요"
+          ? "저장소 확인 필요"
           : "실제 상태 확인";
   return (
     <section className="panel p-6">
-      <div className="mb-5"><p className="text-xs font-black uppercase tracking-wide text-muted">Integrations</p><h2 className="mt-1 text-lg font-extrabold text-ink">GitHub</h2><p className="mt-1 text-sm text-muted">Repository 연결은 보조 기능이며 프로젝트 업무 기능과 독립적으로 동작합니다.</p></div>
+      <div className="mb-5"><p className="text-xs font-black tracking-wide text-muted">연동</p><h2 className="mt-1 text-lg font-extrabold text-ink">GitHub 저장소</h2><p className="mt-1 text-sm text-muted">프로젝트의 소스 코드 저장소를 연결합니다.</p></div>
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-surface">
@@ -927,8 +902,8 @@ function GitHubIntegrationSection() {
               </h2>
               <p className="mt-1 text-sm text-muted">
                 {project.visibility === "private"
-                  ? "Private Repository"
-                  : "Public Repository"}
+                  ? "비공개 저장소"
+                  : "공개 저장소"}
               </p>
               <div className="mt-2 flex gap-2">
                 <Badge tone={project.status === "creating" ? "amber" : "green"}>
@@ -951,17 +926,16 @@ function GitHubIntegrationSection() {
         </div>
         {repositoryStatus.data?.reconciled && (
           <Alert tone="success" className="mt-5">
-            Repository marker와 DB 연결 메타데이터를 복구했습니다.
+            GitHub 저장소 연결을 복구했습니다.
           </Alert>
         )}
         {state === "conflict" && (
           <Alert className="mt-5">
-            Repository는 존재하지만 marker가 없거나 이 Project UUID와 일치하지
-            않아 자동 연결하지 않았습니다.
+            같은 이름의 저장소가 다른 프로젝트에 연결되어 있어 자동으로 연결하지 않았습니다.
           </Alert>
         )}
         {project.github_error_code && (
-          <Alert className="mt-5">{project.github_error_code}</Alert>
+          <Alert className="mt-5">{githubErrorMessage(project.github_error_code)}</Alert>
         )}
         {(retry.error || repositoryStatus.error) && (
           <Alert className="mt-5">
@@ -992,7 +966,7 @@ function GitHubIntegrationSection() {
             {actionLabel}
           </Button>
         </div>
-        <label className="mt-5 flex items-center justify-between rounded-xl border border-line p-3"><div><div className="text-sm font-semibold text-ink">Collaborator 자동 동기화</div><div className="text-xs text-muted">팀원 추가/제거 시 GitHub 접근 권한 반영</div></div><input type="checkbox" checked={project.github_auto_sync} onChange={(event) => void updateProject(project.id, { github_auto_sync: event.target.checked })} /></label>
+        <label className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-line p-3"><div><div className="text-sm font-semibold text-ink">팀원 권한 자동 연동</div><div className="text-xs text-muted">팀원을 추가하거나 제거할 때 GitHub 접근 권한도 함께 반영합니다.</div></div><input type="checkbox" aria-label="GitHub 팀원 권한 자동 연동" checked={project.github_auto_sync} onChange={(event) => void updateProject(project.id, { github_auto_sync: event.target.checked })} /></label>
         {repositoryStatus.data?.commits?.length ? <div className="mt-6 border-t border-line pt-5"><h3 className="text-sm font-extrabold text-ink">최근 커밋</h3><div className="mt-3 space-y-2">{repositoryStatus.data.commits.slice(0, 10).map((commit) => <div key={commit.sha} className="rounded-xl bg-raised p-3"><p className="truncate text-sm font-semibold text-ink">{commit.message.split("\n")[0]}</p><p className="mt-1 text-[10px] text-muted">{commit.author ?? "GitHub 사용자"} · {commit.authoredAt ? new Date(commit.authoredAt).toLocaleString("ko-KR") : "시간 정보 없음"} · {commit.sha}</p></div>)}</div></div> : null}
     </section>
   );
@@ -1048,13 +1022,13 @@ export function ProjectSettingsPage() {
         <EmptyState
           icon={<ShieldCheck />}
           title="읽기 전용"
-          description="Owner와 Admin만 프로젝트 설정을 변경할 수 있습니다."
+          description="프로젝트 소유자와 관리자만 설정을 변경할 수 있습니다."
         />
       </div>
     );
   return (
     <div className="page-wrap">
-      <PageHeader eyebrow="Settings" title="프로젝트 설정" />
+      <PageHeader eyebrow="설정" title="프로젝트 설정" />
       <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
         <form
           className="panel p-5"
@@ -1090,10 +1064,10 @@ export function ProjectSettingsPage() {
           </Button>
         </form>
         <section className="panel border-red-500/20 p-5">
-          <h2 className="font-extrabold text-red-600">Danger zone</h2>
+          <h2 className="font-extrabold text-red-600">주의가 필요한 작업</h2>
           <p className="mt-2 text-sm leading-6 text-muted">
-            프로젝트 보관은 목록에서 숨깁니다. 영구 삭제는 GitHub Repository,
-            private 파일과 프로젝트 데이터를 순서대로 정리합니다.
+            프로젝트 보관은 목록에서 숨깁니다. 영구 삭제는 GitHub 저장소,
+            파일과 프로젝트 데이터를 순서대로 정리합니다.
           </p>
           <Button
             variant="secondary"
@@ -1121,7 +1095,7 @@ export function ProjectSettingsPage() {
         description="복구하기 어렵습니다. 계속하려면 프로젝트 이름을 정확히 입력하세요."
       >
         <Alert>
-          GitHub Repository, 암호화 파일과 프로젝트 업무 데이터가 함께
+          GitHub 저장소, 암호화 파일과 프로젝트 업무 데이터가 함께
           삭제됩니다.
         </Alert>
         {deleteMutation.error && (

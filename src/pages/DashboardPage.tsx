@@ -35,7 +35,7 @@ export function DashboardPage() {
       <PageHeader eyebrow="Team Rocket" title={`안녕하세요, ${profile?.name ?? "사용자"}님`} description="내가 만들었거나 팀원으로 참여 중인 프로젝트만 표시됩니다." action={admin ? <Button onClick={() => setCreateOpen(true)}><Plus size={17} /> 새 프로젝트</Button> : undefined} />
       {projects.isLoading ? <div className="flex min-h-72 items-center justify-center"><Spinner /></div> : projects.error ? <div className="panel p-5 text-sm text-red-600">{projects.error.message}</div> : <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="내 프로젝트" value={active.length} detail="RLS로 허용된 프로젝트" icon={<FolderKanban size={18} />} />
+          <StatCard label="내 프로젝트" value={active.length} detail="참여 중인 프로젝트" icon={<FolderKanban size={18} />} />
           <StatCard label="내 작업" value={myTasks.length} detail="복수 담당 포함" icon={<CheckSquare size={18} />} />
           <StatCard label="진행 중" value={allTasks.filter((task) => task.status === "in_progress").length} detail="전체 접근 가능 프로젝트" icon={<Clock3 size={18} />} />
           <StatCard label="완료" value={allTasks.filter((task) => task.status === "done").length} detail={`${allTasks.length}개 작업 중`} icon={<CheckCircle2 size={18} />} />
@@ -70,7 +70,7 @@ export function ProjectsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   return (
     <div className="page-wrap">
-      <PageHeader eyebrow="Projects" title="내 프로젝트" description={admin ? "생성자이거나 팀원으로 참여한 프로젝트입니다." : "관리자가 프로젝트에 초대하면 여기에 표시됩니다."} action={admin ? <Button onClick={() => setCreateOpen(true)}><Plus size={17} /> 새 프로젝트</Button> : undefined} />
+      <PageHeader eyebrow="프로젝트" title="내 프로젝트" description={admin ? "내가 만들었거나 팀원으로 참여한 프로젝트입니다." : "관리자가 프로젝트에 초대하면 여기에 표시됩니다."} action={admin ? <Button onClick={() => setCreateOpen(true)}><Plus size={17} /> 새 프로젝트</Button> : undefined} />
       {projects.isLoading ? <Spinner /> : projects.data?.length ? <div className="space-y-3">{projects.data.map((project) => { const status = projectStatus(project); return <Link key={project.id} to={`/projects/${project.id}`} className="panel flex flex-col gap-4 p-4 transition hover:border-brand/30 sm:flex-row sm:items-center"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 font-extrabold text-brand">{project.name[0]}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate font-bold text-ink">{project.name}</h3><Badge tone={status.tone}>{status.label}</Badge></div><p className="mt-1 truncate text-xs text-muted">{project.description || "프로젝트 설명이 없습니다."}</p></div><div className="flex items-center gap-6 text-xs text-muted"><span>작업 <strong className="text-ink">{project.tasks?.length ?? 0}</strong></span><span>팀원 <strong className="text-ink">{project.project_members?.length ?? 0}</strong></span><ArrowRight size={16} /></div></Link>; })}</div> : <EmptyState icon={<FolderKanban />} title="참여 중인 프로젝트가 없습니다" description={admin ? "새 프로젝트를 만들어 팀원을 초대하세요." : "관리자가 프로젝트에 초대하면 여기에 표시됩니다."} action={admin ? <Button onClick={() => setCreateOpen(true)}><Plus size={16} /> 새 프로젝트</Button> : undefined} />}
       {admin && <NewProjectDialog open={createOpen} onClose={() => setCreateOpen(false)} />}
     </div>

@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
   Bell,
+  CalendarDays,
   CheckSquare,
   Github,
   Monitor,
@@ -11,6 +13,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Avatar,
+  Alert,
   Badge,
   Button,
   EmptyState,
@@ -30,6 +33,12 @@ import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../stores/authStore";
 import type { Project, Task } from "../types/domain";
 import { ThemeCycleButton } from "../components/ThemeCycleButton";
+import {
+  activityLabel,
+  formatRelativeTime,
+  notificationTypeLabels,
+  taskStatusLabels,
+} from "../lib/display";
 
 async function accessibleTasks(): Promise<Array<Task & { project?: Project }>> {
   const projects = await listProjects();
@@ -54,11 +63,13 @@ export function MyTasksPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="My work"
+        eyebrow="내 작업"
         title="내 작업"
-        description="task_assignees.user_id가 현재 auth.uid()인 작업입니다."
+        description="모든 프로젝트에서 내가 담당자로 지정된 작업을 모아봅니다."
       />
-      {tasks.isLoading ? (
+      {tasks.error ? (
+        <Alert>작업을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void tasks.refetch()}>다시 시도</Button></Alert>
+      ) : tasks.isLoading ? (
         <Spinner />
       ) : mine.length ? (
         <div className="panel divide-y divide-line">
@@ -88,7 +99,7 @@ export function MyTasksPage() {
                       : "neutral"
                 }
               >
-                {task.status}
+                {taskStatusLabels[task.status]}
               </Badge>
               <span className="w-10 text-right text-xs font-bold text-muted">
                 {task.progress}%
@@ -100,7 +111,7 @@ export function MyTasksPage() {
         <EmptyState
           icon={<CheckSquare />}
           title="담당 작업이 없습니다"
-          description="프로젝트 Task 상세에서 복수 담당자로 지정되면 이곳에 표시됩니다."
+          description="프로젝트 작업의 담당자로 지정되면 여기에 표시됩니다."
         />
       )}
     </div>
@@ -122,13 +133,15 @@ export function GlobalCalendarPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="All projects"
+        eyebrow="전체 프로젝트"
         title="전체 일정"
-        description="RLS로 접근 가능한 프로젝트 일정만 집계합니다."
+        description="참여 중인 모든 프로젝트의 일정을 한곳에서 확인합니다."
       />
-      {tasks.isLoading ? (
+      {tasks.error ? (
+        <Alert>일정을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void tasks.refetch()}>다시 시도</Button></Alert>
+      ) : tasks.isLoading ? (
         <Spinner />
-      ) : (
+      ) : dated.length ? (
         <div className="panel divide-y divide-line">
           {dated.map((task) => (
             <Link
@@ -147,10 +160,12 @@ export function GlobalCalendarPage() {
                   {task.project?.name}
                 </div>
               </div>
-              <Badge>{task.status}</Badge>
+              <Badge>{taskStatusLabels[task.status]}</Badge>
             </Link>
           ))}
         </div>
+      ) : (
+        <EmptyState icon={<CalendarDays />} title="예정된 일정이 없습니다" description="작업에 시작일이나 마감일을 지정하면 여기에 표시됩니다." />
       )}
     </div>
   );
@@ -164,13 +179,15 @@ export function GlobalActivityPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Audit"
+        eyebrow="활동"
         title="전체 활동"
         description="내가 접근 가능한 모든 프로젝트의 활동입니다."
       />
-      {activities.isLoading ? (
+      {activities.error ? (
+        <Alert>활동을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void activities.refetch()}>다시 시도</Button></Alert>
+      ) : activities.isLoading ? (
         <Spinner />
-      ) : (
+      ) : activities.data?.length ? (
         <div className="panel divide-y divide-line">
           {activities.data?.map((item) => (
             <div key={item.id} className="flex gap-3 p-4">
@@ -182,15 +199,17 @@ export function GlobalActivityPage() {
               <div>
                 <p className="text-sm text-ink">
                   <strong>{item.actor?.name ?? "시스템"}</strong> ·{" "}
-                  {item.action}
+                  {activityLabel(item.action)}
                 </p>
                 <p className="mt-1 text-[11px] text-muted">
-                  {new Date(item.created_at).toLocaleString("ko-KR")}
+                  {formatRelativeTime(item.created_at)}
                 </p>
               </div>
             </div>
           ))}
         </div>
+      ) : (
+        <EmptyState icon={<Activity />} title="활동 기록이 없습니다" description="프로젝트에서 변경한 내용이 생기면 여기에 표시됩니다." />
       )}
     </div>
   );
@@ -205,10 +224,12 @@ export function NotificationsPage() {
   });
   return (
     <div className="page-wrap">
-      <PageHeader eyebrow="Inbox" title="알림" action={<Button variant="secondary" onClick={async () => { await markAllNotificationsRead(); await queryClient.invalidateQueries({ queryKey: ["notifications"] }); }}>모두 읽음</Button>} />
-      {notifications.isLoading ? (
+      <PageHeader eyebrow="알림" title="알림" action={<Button variant="secondary" disabled={!notifications.data?.some((item) => !item.read_at)} onClick={async () => { await markAllNotificationsRead(); await queryClient.invalidateQueries({ queryKey: ["notifications"] }); }}>모두 읽음</Button>} />
+      {notifications.error ? (
+        <Alert>알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void notifications.refetch()}>다시 시도</Button></Alert>
+      ) : notifications.isLoading ? (
         <Spinner />
-      ) : (
+      ) : notifications.data?.length ? (
         <div className="panel divide-y divide-line">
           {notifications.data?.map((item) => (
             <button
@@ -233,13 +254,15 @@ export function NotificationsPage() {
                   {item.title}
                 </div>
                 <div className="mt-1 text-[11px] text-muted">
-                  {new Date(item.created_at).toLocaleString("ko-KR")}
+                  {formatRelativeTime(item.created_at)}
                 </div>
               </div>
-              <Badge>{item.type}</Badge>
+              <Badge>{notificationTypeLabels[item.type]}</Badge>
             </button>
           ))}
         </div>
+      ) : (
+        <EmptyState icon={<Bell />} title="알림이 없습니다" description="새로운 알림이 생기면 여기에 표시됩니다." />
       )}
     </div>
   );
@@ -263,7 +286,7 @@ export function SettingsPage() {
   };
   return (
     <div className="page-wrap max-w-4xl">
-      <PageHeader eyebrow="Account" title="설정" />
+      <PageHeader eyebrow="계정" title="설정" />
       <div className="grid gap-5 md:grid-cols-2">
         <form onSubmit={submit} className="panel p-5">
           <div className="flex items-center gap-2">
@@ -287,7 +310,7 @@ export function SettingsPage() {
             disabled
           />
           <label className="label mt-4" htmlFor="profile-github">
-            GitHub Username
+            GitHub 사용자명
           </label>
           <div className="relative">
             <Github className="absolute left-3 top-3 text-muted" size={16} />
@@ -296,7 +319,7 @@ export function SettingsPage() {
               value={github}
               onChange={(event) => setGithub(event.target.value)}
               className="pl-9"
-              placeholder="Github name"
+              placeholder="github-username"
               pattern="[A-Za-z0-9-]{1,39}"
             />
           </div>

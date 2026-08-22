@@ -28,7 +28,7 @@ export default defineConfig(({ command, mode }) => {
             react: ["react", "react-dom", "react-router-dom"],
             supabase: ["@supabase/supabase-js"],
             query: ["@tanstack/react-query", "zustand"],
-            interaction: ["@dnd-kit/core", "@dnd-kit/sortable"]
+            interaction: ["@dnd-kit/core"]
           }
         }
       }

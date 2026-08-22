@@ -77,7 +77,7 @@ async function saveKeyring(userId: string, record: UserKeyringRecord): Promise<v
     key_salt: record.keySalt,
     key_kdf_iterations: record.keyKdfIterations
   }).eq("id", userId);
-  if (error) throw new Error("사용자 암호화 keyring을 저장할 수 없습니다.");
+  if (error) throw new Error("사용자 보안 키를 저장할 수 없습니다.");
 }
 
 function accountIsInactive(user: User, profile: Profile): boolean {
@@ -271,7 +271,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const profile = get().profile;
     if (!profile) throw new Error("프로필을 찾을 수 없습니다. 다시 로그인해 주세요.");
     const record = profile ? keyringRecord(profile) : null;
-    if (!record) throw new Error("암호화 keyring이 설정되지 않았습니다. 다시 로그인해 주세요.");
+    if (!record) throw new Error("보안 키가 설정되지 않았습니다. 다시 로그인해 주세요.");
     set({ loading: true, error: null });
     try {
       const keyring = await unlockUserKeyring(credential, record);

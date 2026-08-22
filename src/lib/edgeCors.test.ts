@@ -90,10 +90,7 @@ describe("Edge Function CORS policy", () => {
       "sync-project-member",
       "record-access-event",
       "admin-list-access-logs",
-      "ai-assistant",
-      "admin-ai-settings",
       "delete-task",
-      "ai-models",
       "admin-delete-user",
       "github-repository-status"
     ];

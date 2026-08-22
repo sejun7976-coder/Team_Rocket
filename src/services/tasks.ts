@@ -74,10 +74,10 @@ function taskRpcError(error: { code?: string; message?: string } | null): TaskSe
   if (code === "RT400" || code === "22000" || code === "22007" || code === "22P02" || message.includes("TASK_INPUT_INVALID")) {
     return new TaskServiceError("TASK_INPUT_INVALID", "작업 입력값을 확인해 주세요.");
   }
-  if (code === "PGRST202" || code === "42883") return new TaskServiceError("TASK_RPC_NOT_AVAILABLE", "작업 생성 RPC가 API schema cache에 없습니다. migration 009 적용 상태를 확인해 주세요. (TASK_RPC_NOT_AVAILABLE)", code);
-  if (code === "42703") return new TaskServiceError("TASK_SCHEMA_ERROR", "작업 저장 과정의 서버 데이터 구조가 올바르지 않습니다. (TASK_SCHEMA_ERROR)", code);
+  if (code === "PGRST202" || code === "42883") return new TaskServiceError("TASK_RPC_NOT_AVAILABLE", "작업 저장 기능을 사용할 수 없습니다. 관리자에게 문의해 주세요.", code);
+  if (code === "42703") return new TaskServiceError("TASK_SCHEMA_ERROR", "작업을 저장하지 못했습니다. 관리자에게 문의해 주세요.", code);
   const safeCode = code && /^[A-Z0-9]{2,12}$/u.test(code) ? code : "UNKNOWN";
-  return new TaskServiceError("TASK_CREATE_FAILED", `작업을 생성할 수 없습니다. (TASK_CREATE_FAILED/${safeCode})`, safeCode);
+  return new TaskServiceError("TASK_CREATE_FAILED", "작업을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.", safeCode);
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
@@ -149,7 +149,7 @@ export async function deleteTask(taskId: string): Promise<{ projectId: string }>
       TASK_SCHEMA_ERROR: "작업 데이터 구조가 올바르지 않습니다."
     };
     const code = error.code in messages ? error.code as TaskServiceErrorCode : "TASK_DELETE_DB_FAILED";
-    throw new TaskServiceError(code, `${messages[code] ?? messages.TASK_DELETE_DB_FAILED} (${code})`);
+    throw new TaskServiceError(code, messages[code] ?? "작업 데이터를 삭제할 수 없습니다.");
   }
 }
 

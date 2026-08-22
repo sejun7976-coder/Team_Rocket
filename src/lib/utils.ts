@@ -21,9 +21,14 @@ export function repositorySlug(value: string): string {
 }
 
 export function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`;
-  return `${(value / 1024 ** 2).toFixed(1)} MiB`;
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"] as const;
+  const index = Math.min(
+    Math.floor(Math.log(value) / Math.log(1024)),
+    units.length - 1,
+  );
+  const size = value / 1024 ** index;
+  return `${size.toFixed(index === 0 || size >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
 export function initials(name: string): string {

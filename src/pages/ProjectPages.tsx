@@ -44,7 +44,13 @@ import { getProject, listProjectMembers } from "../services/projects";
 import { listActivities } from "../services/activity";
 import { createTask, listTasks, updateTask } from "../services/tasks";
 import { uploadProjectFile } from "../services/files";
-import { validateProjectFile } from "../lib/filePolicy";
+import { MAX_FILE_SIZE_LABEL, validateProjectFile } from "../lib/filePolicy";
+import {
+  activityLabel,
+  projectRoleLabels,
+  taskPriorityLabels,
+  taskStatusLabels,
+} from "../lib/display";
 import { formatBytes } from "../lib/utils";
 import { useAuthStore } from "../stores/authStore";
 import type {
@@ -55,6 +61,7 @@ import type {
   TaskStatus,
 } from "../types/domain";
 import {
+  Alert,
   Avatar,
   Badge,
   Button,
@@ -67,14 +74,14 @@ import {
 } from "../components/ui";
 
 const projectNav = [
-  ["", "Overview", LayoutDashboard],
-  ["board", "Board", LayoutDashboard],
-  ["tasks", "Tasks", ListTodo],
-  ["calendar", "Calendar", CalendarDays],
-  ["files", "Files", FileText],
-  ["activity", "Activity", Activity],
-  ["team", "Team", Users],
-  ["settings", "Settings", Settings],
+  ["", "개요", LayoutDashboard],
+  ["board", "보드", LayoutDashboard],
+  ["tasks", "작업", ListTodo],
+  ["calendar", "캘린더", CalendarDays],
+  ["files", "파일", FileText],
+  ["activity", "활동", Activity],
+  ["team", "팀", Users],
+  ["settings", "설정", Settings],
 ] as const;
 
 interface ProjectContext {
@@ -104,7 +111,7 @@ export function ProjectLayoutPage() {
         <EmptyState
           icon={<ShieldAlert />}
           title="프로젝트에 접근할 수 없습니다"
-          description="멤버에서 제거되었거나 존재하지 않는 프로젝트입니다. RLS가 요청을 차단했습니다."
+          description="프로젝트가 없거나 접근 권한이 없습니다."
         />
       </div>
     );
@@ -170,9 +177,7 @@ export function ProjectLayoutPage() {
 }
 
 function statusLabel(status: TaskStatus): string {
-  return { todo: "TODO", in_progress: "진행 중", review: "검토", done: "완료" }[
-    status
-  ];
+  return taskStatusLabels[status];
 }
 
 function statusTone(
@@ -217,11 +222,10 @@ export function ProjectOverviewPage() {
   const dueSoon = list.filter((task) => task.status !== "done" && inDays(task) !== null && inDays(task)! <= 3).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 8);
   const myTasks = list.filter((task) => task.task_assignees?.some((item) => item.user_id === user?.id));
   const importantMine = [...myTasks].filter((task) => task.status !== "done").sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999")).slice(0, 5);
-  const activityLabels: Record<string, string> = { task_created: "작업을 생성했습니다.", task_status_changed: "작업 상태를 변경했습니다.", task_progress_changed: "작업 진행률을 변경했습니다.", task_due_date_changed: "작업 마감일을 변경했습니다.", assignee_added: "담당자를 추가했습니다.", assignee_removed: "담당자를 제거했습니다.", comment_created: "댓글을 작성했습니다.", file_uploaded: "파일을 업로드했습니다.", member_added: "팀원을 추가했습니다.", member_removed: "팀원을 제거했습니다." };
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Project overview"
+        eyebrow="프로젝트 개요"
         title="프로젝트 현황"
         description={project.description ?? "프로젝트 설명이 없습니다."}
       />
@@ -229,7 +233,9 @@ export function ProjectOverviewPage() {
         <div className="flex items-center justify-between text-sm"><h2 className="font-extrabold text-ink">프로젝트 진행률</h2><strong className="text-brand">{projectProgress(list)}%</strong></div>
         <div className="mt-3 h-3 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-brand transition-all" style={{ width: `${projectProgress(list)}%` }} /></div>
       </section>
-      {tasks.isLoading ? (
+      {tasks.error || members.error || activities.error ? (
+        <Alert>프로젝트 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</Alert>
+      ) : tasks.isLoading ? (
         <Spinner />
       ) : (
         <>
@@ -264,7 +270,7 @@ export function ProjectOverviewPage() {
                   to={`/projects/${project.id}/board`}
                   className="text-xs font-semibold text-brand"
                 >
-                  Board 보기
+                  보드 보기
                 </Link>
               </div>
               <div className="mt-4 space-y-2">
@@ -321,7 +327,7 @@ export function ProjectOverviewPage() {
                     <Badge
                       tone={member.role === "owner" ? "purple" : "neutral"}
                     >
-                      {member.role}
+                      {projectRoleLabels[member.role]}
                     </Badge>
                   </div>
                 ))}
@@ -335,15 +341,15 @@ export function ProjectOverviewPage() {
               <div className="mt-3 space-y-2">{importantMine.map((task) => <Link key={task.id} to={`/tasks/${task.id}`} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:bg-raised"><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span><Badge tone={inDays(task) !== null && inDays(task)! < 0 ? "red" : inDays(task) === 0 ? "amber" : "neutral"}>{inDays(task) === null ? "마감 없음" : inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘 마감" : `${inDays(task)}일 남음`}</Badge></Link>)}</div>
             </section>
             <section className="panel p-5">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">마감 임박</h2><Link to={`/projects/${project.id}/calendar`} className="text-xs font-semibold text-brand">Calendar 보기</Link></div>
+              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">마감 임박</h2><Link to={`/projects/${project.id}/calendar`} className="text-xs font-semibold text-brand">캘린더 보기</Link></div>
               <div className="mt-3 space-y-2">{dueSoon.map((task) => <Link key={task.id} to={`/tasks/${task.id}`} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:bg-raised"><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span><span className={`text-xs font-bold ${inDays(task)! < 0 ? "text-red-600" : "text-muted"}`}>{inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘" : inDays(task) === 1 ? "내일" : `${inDays(task)}일 이내`}</span></Link>)}{!dueSoon.length && <p className="py-6 text-center text-sm text-muted">3일 이내 마감 작업이 없습니다.</p>}</div>
             </section>
             <section className="panel p-5">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">최근 Activity</h2><Link to={`/projects/${project.id}/activity`} className="text-xs font-semibold text-brand">전체 보기</Link></div>
-              <div className="mt-3 space-y-3">{activities.data?.slice(0, 6).map((activity) => <div key={activity.id} className="flex gap-3"><Avatar name={activity.actor?.name ?? "시스템"} url={activity.actor?.avatar_url} size="sm" /><div><p className="text-sm text-ink"><strong>{activity.actor?.name ?? "시스템"}</strong>님이 {activityLabels[activity.action] ?? activity.action}</p><p className="mt-0.5 text-[10px] text-muted">{new Date(activity.created_at).toLocaleString("ko-KR")}</p></div></div>)}</div>
+              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">최근 활동</h2><Link to={`/projects/${project.id}/activity`} className="text-xs font-semibold text-brand">전체 보기</Link></div>
+              <div className="mt-3 space-y-3">{activities.data?.slice(0, 6).map((activity) => <div key={activity.id} className="flex gap-3"><Avatar name={activity.actor?.name ?? "시스템"} url={activity.actor?.avatar_url} size="sm" /><div><p className="text-sm text-ink"><strong>{activity.actor?.name ?? "시스템"}</strong>님이 {activityLabel(activity.action)}</p><p className="mt-0.5 text-[10px] text-muted">{new Date(activity.created_at).toLocaleString("ko-KR")}</p></div></div>)}</div>
             </section>
             <section className="panel p-5">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">팀 현황</h2><Link to={`/projects/${project.id}/team`} className="text-xs font-semibold text-brand">Team 보기</Link></div>
+              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">팀 현황</h2><Link to={`/projects/${project.id}/team`} className="text-xs font-semibold text-brand">팀 보기</Link></div>
               <div className="mt-3 space-y-3">{members.data?.slice(0, 8).map((member) => { const assigned = list.filter((task) => task.task_assignees?.some((assignee) => assignee.user_id === member.user_id)); const done = assigned.filter((task) => task.status === "done").length; return <div key={member.user_id} className="flex items-center gap-3"><Avatar name={member.profile?.name ?? "팀원"} url={member.profile?.avatar_url} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{member.profile?.name}</span><span className="text-xs text-muted">완료 <strong className="text-ink">{done}</strong> / 전체 <strong className="text-ink">{assigned.length}</strong></span></div>; })}</div>
             </section>
           </div>
@@ -580,7 +586,7 @@ function TaskFormDialog({
               파일 추가 또는 여기로 끌어놓기
             </span>
             <span className="mt-1 text-xs text-muted">
-              파일당 최대 50 MiB · 실행 파일 제외
+              파일당 최대 {MAX_FILE_SIZE_LABEL} · 실행 파일 제외
             </span>
             <input
               type="file"
@@ -611,6 +617,7 @@ function TaskFormDialog({
                 <button
                   type="button"
                   aria-label={`${file.name} 제거`}
+                  title="첨부 파일 제거"
                   onClick={() =>
                     setAttachments((current) =>
                       current.filter((_, itemIndex) => itemIndex !== index),
@@ -707,7 +714,7 @@ function DraggableTaskCard({ task }: { task: Task }) {
                 : "neutral"
           }
         >
-          {task.priority}
+          {taskPriorityLabels[task.priority]}
         </Badge>
         <MoreHorizontal size={15} className="text-muted" />
       </div>
@@ -838,7 +845,7 @@ export function BoardPage() {
     <div className="page-wrap max-w-none">
       <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-extrabold text-ink">Kanban Board</h1>
+          <h1 className="text-2xl font-extrabold text-ink">보드</h1>
           <p className="mt-1 text-sm text-muted">
             카드를 드래그해 상태를 변경합니다.
           </p>
@@ -878,7 +885,9 @@ export function BoardPage() {
           </Button>
         </div>
       </div>
-      {tasks.isLoading ? (
+      {tasks.error ? (
+        <Alert>보드를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void tasks.refetch()}>다시 시도</Button></Alert>
+      ) : tasks.isLoading ? (
         <Spinner />
       ) : (
         <DndContext
@@ -927,9 +936,9 @@ export function TaskListPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Tasks"
+        eyebrow="작업"
         title="전체 작업"
-        description="프로젝트 멤버에게 허용된 작업과 복수 담당자를 확인합니다."
+        description="프로젝트 작업의 상태와 담당자를 한눈에 확인합니다."
         action={
           <div className="relative">
             <Search size={15} className="absolute left-3 top-3 text-muted" />
@@ -942,9 +951,11 @@ export function TaskListPage() {
           </div>
         }
       />
-      {tasks.isLoading ? (
+      {tasks.error ? (
+        <Alert>작업을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void tasks.refetch()}>다시 시도</Button></Alert>
+      ) : tasks.isLoading ? (
         <Spinner />
-      ) : (
+      ) : filtered.length ? (
         <div className="panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
@@ -1001,6 +1012,8 @@ export function TaskListPage() {
             </table>
           </div>
         </div>
+      ) : (
+        <EmptyState icon={<ListTodo />} title="작업이 없습니다" description={search ? "검색 조건에 맞는 작업이 없습니다." : "새 작업을 만들어 프로젝트를 시작해 보세요."} />
       )}
     </div>
   );

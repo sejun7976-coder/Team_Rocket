@@ -62,7 +62,7 @@ export async function uploadProjectFile(
       cacheControl: "0",
     });
   if (storageError)
-    throw new Error("암호화 파일을 Storage에 업로드할 수 없습니다.");
+    throw new Error("파일을 업로드할 수 없습니다.");
   onProgress?.("uploading", 80);
   const [filenameEncrypted, checksumEncrypted] = await Promise.all([
     encryptContent(file.name, key, {
@@ -98,7 +98,7 @@ export async function uploadProjectFile(
     .single();
   if (metadataError) {
     await supabase.storage.from("project-files").remove([path]);
-    throw new Error("파일 metadata를 저장할 수 없습니다.");
+    throw new Error("파일 정보를 저장할 수 없습니다.");
   }
   onProgress?.("uploading", 100);
   return { ...(metadata as unknown as ProjectFile), filename: file.name };
@@ -164,7 +164,7 @@ export async function deleteProjectFile(file: ProjectFile): Promise<void> {
     .delete()
     .eq("id", file.id);
   if (metadataError)
-    throw new Error("첨부 파일 metadata를 삭제할 수 없습니다.");
+    throw new Error("첨부 파일 정보를 삭제할 수 없습니다.");
 }
 
 export async function downloadProjectFile(

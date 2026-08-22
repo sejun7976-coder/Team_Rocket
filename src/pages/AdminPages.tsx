@@ -7,7 +7,6 @@ import {
   Plus,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
@@ -35,14 +34,6 @@ import {
   type AccessLogEventType,
 } from "../services/admin";
 import { useAuthStore } from "../stores/authStore";
-import {
-  addAIModel,
-  deleteAIModel,
-  getAISettings,
-  saveAIGateway,
-  testAIConnection,
-  updateAIModel,
-} from "../services/ai";
 
 const statusLabels: Record<AdminUserStatus, string> = {
   initial_login_pending: "최초 로그인 전",
@@ -137,8 +128,7 @@ function AccessLogDialog({
           </select>
         </div>
         <p className="text-xs text-muted">
-          Auth Audit Logs를 우선 사용하고 app access log로 국가·기기 정보를
-          보강합니다.
+          인증 감사 기록과 서비스 접속 기록을 함께 표시합니다.
         </p>
       </div>
       {logs.error && <Alert className="mb-4">{logs.error.message}</Alert>}
@@ -321,7 +311,7 @@ function CreateUserDialog({
             required
           />
           <label className="label mt-4" htmlFor="admin-github">
-            GitHub Username
+            GitHub 사용자명
           </label>
           <Input
             id="admin-github"
@@ -329,7 +319,7 @@ function CreateUserDialog({
             onChange={(event) => setGithubUsername(event.target.value)}
             maxLength={39}
             pattern="[A-Za-z0-9-]{1,39}"
-            placeholder="Github name"
+            placeholder="github-username"
           />
           <p className="mt-1.5 text-xs text-muted">
             GitHub 프로필 URL의 사용자명(@username)을 입력하세요. 예:
@@ -387,7 +377,7 @@ function ResetPasswordDialog({
           </Alert>
           <Alert tone="info" className="mt-3">
             클라이언트 암호화 키는 안전하게 폐기되었습니다. 기존 프로젝트의
-            민감한 데이터는 Owner/Admin이 프로젝트 팀 화면에서 이 사용자의 키를
+            민감한 데이터는 프로젝트 소유자나 관리자가 팀 화면에서 이 사용자의 키를
             다시 공유해야 열 수 있습니다.
           </Alert>
           <Button className="mt-5 w-full" onClick={close}>
@@ -448,11 +438,11 @@ function DeleteUserDialog({
       open={Boolean(target)}
       onClose={onClose}
       title="사용자 완전 삭제"
-      description="이 작업은 Auth 계정과 멤버십을 제거하며 되돌릴 수 없습니다."
+      description="이 작업은 사용자 계정과 프로젝트 멤버십을 제거하며 되돌릴 수 없습니다."
     >
       <Alert>
-        프로젝트 소유자와 system_admin은 삭제할 수 없습니다. GitHub collaborator
-        정리가 실패하면 삭제도 중단됩니다.
+        프로젝트 소유자와 시스템 관리자는 삭제할 수 없습니다. GitHub 팀원 권한을
+        제거하지 못하면 계정 삭제도 중단됩니다.
       </Alert>
       <label className="label mt-4" htmlFor="delete-user-confirmation">
         확인을 위해 학번 {target?.student_id} 입력
@@ -514,9 +504,9 @@ export function AdminUsersPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Admin"
+        eyebrow="관리자"
         title="사용자 관리"
-        description="계정과 최근 90일 접속 메타데이터는 서버에서 관리자 권한을 다시 확인한 뒤 제공합니다."
+        description="사용자 계정과 최근 90일 접속 기록을 관리합니다."
         action={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus size={16} /> 사용자 추가
@@ -572,6 +562,7 @@ export function AdminUsersPage() {
               <details className="relative justify-self-end">
                 <summary
                   aria-label={`${managedUser.name} 관리 메뉴`}
+                  title="관리 메뉴"
                   className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg hover:bg-raised"
                 >
                   <MoreVertical size={17} />
@@ -667,9 +658,9 @@ export function AdminProjectsPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Admin"
+        eyebrow="관리자"
         title="프로젝트 관리"
-        description="모든 프로젝트의 운영 상태와 GitHub 연결 상태를 확인합니다. 민감한 암호화 내용은 관리자에게도 노출되지 않습니다."
+        description="모든 프로젝트의 운영 상태와 GitHub 연결 상태를 확인합니다."
       />
       {projects.error && (
         <Alert className="mb-4">{projects.error.message}</Alert>
@@ -741,7 +732,7 @@ export function AdminSystemPage() {
   return (
     <div className="page-wrap">
       <PageHeader
-        eyebrow="Admin"
+        eyebrow="관리자"
         title="시스템 설정"
         description="배포 환경에서 확인해야 할 인증·보안 정책입니다."
       />
@@ -749,15 +740,15 @@ export function AdminSystemPage() {
         <section className="panel p-5">
           <div className="flex items-center gap-2 text-ink">
             <ShieldCheck className="text-brand" size={20} />
-            <h2 className="font-extrabold">Auth 정책</h2>
+            <h2 className="font-extrabold">인증 정책</h2>
           </div>
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between">
-              <dt className="text-muted">Public signup</dt>
+              <dt className="text-muted">공개 회원가입</dt>
               <dd className="font-bold text-ink">비활성화</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted">Minimum password length</dt>
+              <dt className="text-muted">최소 비밀번호 길이</dt>
               <dd className="font-bold text-ink">6</dd>
             </div>
             <div className="flex justify-between">
@@ -776,10 +767,10 @@ export function AdminSystemPage() {
             <h2 className="font-extrabold">운영 확인</h2>
           </div>
           <ul className="mt-4 space-y-3 text-sm text-muted">
-            <li>• Migration 001~009 순서대로 적용</li>
-            <li>• Authentication Audit Logs DB 저장 활성화</li>
-            <li>• FRONTEND_URL과 service role secret 확인</li>
-            <li>• 최초 관리자 one-time bootstrap 완료</li>
+            <li>• 데이터베이스 변경 사항 최신 상태 확인</li>
+            <li>• 인증 감사 기록 저장 활성화</li>
+            <li>• 서비스 주소와 서버 보안 설정 확인</li>
+            <li>• 최초 시스템 관리자 등록 완료</li>
           </ul>
         </section>
       </div>
@@ -787,157 +778,6 @@ export function AdminSystemPage() {
         실제 Supabase Dashboard 설정 절차는 SUPABASE_SETUP.md에 정리되어
         있습니다.
       </Alert>
-    </div>
-  );
-}
-
-export function AdminAISettingsPage() {
-  const queryClient = useQueryClient();
-  const settings = useQuery({
-    queryKey: ["admin-ai-settings"],
-    queryFn: getAISettings,
-  });
-  const [enabled, setEnabled] = useState(false);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [newModel, setNewModel] = useState({
-    family: "custom",
-    modelId: "",
-    displayName: "",
-    enabled: false,
-  });
-  useEffect(() => {
-    if (!settings.data) return;
-    setEnabled(settings.data.gateway.enabled);
-    setBaseUrl(settings.data.gateway.baseUrl);
-  }, [settings.data]);
-  const refresh = async () => {
-    setApiKey("");
-    await queryClient.invalidateQueries({ queryKey: ["admin-ai-settings"] });
-    await queryClient.invalidateQueries({ queryKey: ["ai-models"] });
-  };
-  const gatewayMutation = useMutation({
-    mutationFn: () => saveAIGateway({ enabled, baseUrl: baseUrl.trim(), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }),
-    onSuccess: refresh,
-  });
-  const test = useMutation({ mutationFn: testAIConnection });
-  const addModel = useMutation({
-    mutationFn: () => addAIModel({ ...newModel, family: newModel.family.trim().toLowerCase(), modelId: newModel.modelId.trim(), displayName: newModel.displayName.trim() }),
-    onSuccess: async () => {
-      setNewModel({ family: "custom", modelId: "", displayName: "", enabled: false });
-      setAddOpen(false);
-      await refresh();
-    },
-  });
-  const editModel = useMutation({
-    mutationFn: updateAIModel,
-    onSuccess: refresh,
-  });
-  const removeModel = useMutation({
-    mutationFn: deleteAIModel,
-    onSuccess: refresh,
-  });
-  const error =
-    settings.error ??
-    gatewayMutation.error ??
-    test.error ??
-    addModel.error ??
-    editModel.error ??
-    removeModel.error;
-  const visibleModels = settings.data?.models.filter((model) => {
-    const query = search.trim().toLowerCase();
-    return !query || model.display_name.toLowerCase().includes(query) || model.model_id.toLowerCase().includes(query);
-  });
-  return (
-    <div className="page-wrap max-w-5xl">
-      <PageHeader
-        eyebrow="Admin"
-        title="AI 설정"
-        description="단일 Rocket AI Gateway credential과 사용 가능한 모델을 관리합니다. API Key 원문은 저장 후 다시 표시되지 않습니다."
-      />
-      {error && <Alert className="mb-4">{error.message}</Alert>}
-      {settings.isLoading ? (
-        <Spinner />
-      ) : (
-        <>
-          <section className="panel p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2"><Sparkles className="text-brand" size={19} /><h2 className="font-extrabold text-ink">Rocket AI Gateway</h2></div>
-              <div className="flex gap-2"><Badge tone={enabled ? "green" : "neutral"}>AI {enabled ? "활성" : "비활성"}</Badge><Badge tone={settings.data?.gateway.configured ? "green" : "neutral"}>API Key {settings.data?.gateway.configured ? "설정됨" : "미설정"}</Badge></div>
-            </div>
-            <label className="mt-5 flex items-center justify-between rounded-xl border border-line p-3"><span className="text-sm font-semibold text-ink">AI 기능 활성화</span><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /></label>
-            <label className="label mt-4" htmlFor="ai-gateway-base-url">API Base URL</label>
-            <Input id="ai-gateway-base-url" type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://gateway.example.com/v1" required />
-            <label className="label mt-4" htmlFor="ai-gateway-key">Gateway API Key 입력 또는 교체</label>
-            <Input id="ai-gateway-key" type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={settings.data?.gateway.configured ? "기존 Key 유지 · 새 값을 입력하면 교체" : "저장 후 다시 표시되지 않음"} />
-            <div className="mt-4 flex flex-wrap gap-2"><Button onClick={() => gatewayMutation.mutate()} disabled={!baseUrl.trim() || gatewayMutation.isPending}>저장</Button><Button variant="secondary" disabled={!settings.data?.gateway.configured || test.isPending} onClick={() => test.mutate()}>연결 테스트</Button></div>
-            {test.isSuccess && <Alert tone="success" className="mt-4">AI Gateway 연결을 확인했습니다.</Alert>}
-          </section>
-          <section className="panel mt-5 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-extrabold text-ink">사용 가능한 모델</h2>
-              <Button size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> 모델 추가</Button>
-            </div>
-            <Input className="mt-4" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="표시 이름 또는 Model ID 검색" />
-            <div className="mt-4 space-y-2">
-              {visibleModels?.map((model) => (
-                <div
-                  key={model.id}
-                  className="grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-[1fr_auto] sm:items-center"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ink">
-                      {model.display_name} <span className="font-normal text-muted">· {model.family}</span>{model.is_default && <Badge tone="purple" className="ml-2">기본</Badge>}
-                    </p>
-                    <p className="truncate font-mono text-[11px] text-muted">
-                      {model.model_id}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    <Button
-                      size="sm"
-                      variant={model.enabled ? "secondary" : "ghost"}
-                      onClick={() =>
-                        editModel.mutate({
-                          modelSettingId: model.id,
-                          enabled: !model.enabled,
-                        })
-                      }
-                    >
-                      {model.enabled ? "활성" : "비활성"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={model.is_default ? "secondary" : "ghost"}
-                      disabled={model.is_default}
-                      onClick={() =>
-                        editModel.mutate({
-                          modelSettingId: model.id,
-                          isDefault: true,
-                        })
-                      }
-                    >
-                      기본 모델
-                    </Button>
-                    {!model.is_builtin && <Button size="sm" variant="ghost" className="text-red-600" onClick={() => { if (confirm("Custom 모델을 삭제할까요?")) removeModel.mutate(model.id); }}><Trash2 size={13} /></Button>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-          <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Custom 모델 추가" description="Gateway에서 지원하는 정확한 Model ID를 등록합니다.">
-            <form onSubmit={(event) => { event.preventDefault(); addModel.mutate(); }}>
-              <label className="label" htmlFor="ai-model-name">표시 이름</label><Input id="ai-model-name" value={newModel.displayName} onChange={(event) => setNewModel((value) => ({ ...value, displayName: event.target.value }))} required />
-              <label className="label mt-4" htmlFor="ai-model-id">Model ID</label><Input id="ai-model-id" value={newModel.modelId} onChange={(event) => setNewModel((value) => ({ ...value, modelId: event.target.value }))} required />
-              <label className="label mt-4" htmlFor="ai-model-family">Family</label><Input id="ai-model-family" value={newModel.family} onChange={(event) => setNewModel((value) => ({ ...value, family: event.target.value }))} pattern="[a-z0-9][a-z0-9_-]{0,39}" required />
-              <label className="mt-4 flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={newModel.enabled} onChange={(event) => setNewModel((value) => ({ ...value, enabled: event.target.checked }))} /> 추가 즉시 활성화</label>
-              <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setAddOpen(false)}>취소</Button><Button type="submit" disabled={addModel.isPending}>추가</Button></div>
-            </form>
-          </Modal>
-        </>
-      )}
     </div>
   );
 }

@@ -35,7 +35,7 @@ export async function createProject(
 ): Promise<Project> {
   const { user, profile } = useAuthStore.getState();
   if (!user || !profile?.encryption_public_key)
-    throw new Error("사용자 암호화 keyring을 먼저 설정하세요.");
+    throw new Error("사용자 보안 설정을 먼저 완료해 주세요.");
   const projectId = crypto.randomUUID();
   const idempotencyKey = crypto.randomUUID();
   const generated = await createProjectKey(
@@ -104,7 +104,7 @@ export async function addProjectMember(
   role: Exclude<ProjectRole, "owner">,
 ): Promise<ProjectMember> {
   if (!target.encryption_public_key)
-    throw new Error("대상 사용자의 암호화 keyring이 아직 설정되지 않았습니다.");
+    throw new Error("대상 사용자의 보안 설정이 아직 완료되지 않았습니다.");
   const projectKey = await useProjectKeyStore.getState().unlock(projectId);
   const wrapped = await wrapExistingProjectKey(
     projectKey,
@@ -134,7 +134,7 @@ export async function rewrapProjectMemberKey(
 ): Promise<void> {
   if (!target.encryption_public_key)
     throw new Error(
-      "대상 사용자가 비밀번호 변경과 keyring 설정을 먼저 완료해야 합니다.",
+      "대상 사용자가 비밀번호 변경과 보안 설정을 먼저 완료해야 합니다.",
     );
   const projectKey = await useProjectKeyStore.getState().unlock(projectId);
   const wrapped = await wrapExistingProjectKey(
@@ -197,10 +197,10 @@ export async function deleteProject(
         ? String(error.code)
         : "PROJECT_DELETE_FAILED";
     const messages: Record<string, string> = {
-      PROJECT_OWNER_REQUIRED: "Project Owner만 프로젝트를 삭제할 수 있습니다.",
+      PROJECT_OWNER_REQUIRED: "프로젝트 소유자만 프로젝트를 삭제할 수 있습니다.",
       GITHUB_AUTH_FAILED: "GitHub 인증 설정을 확인해 주세요.",
       GITHUB_PERMISSION_DENIED:
-        "GitHub Token에 Repository 삭제 권한이 없습니다.",
+        "GitHub 저장소를 삭제할 권한이 없습니다.",
       GITHUB_NETWORK_FAILED:
         "GitHub에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
       GITHUB_TIMEOUT: "GitHub 응답 시간이 초과되었습니다.",
@@ -209,9 +209,7 @@ export async function deleteProject(
       PROJECT_DELETE_FAILED:
         "프로젝트 데이터를 삭제하지 못했습니다. 다시 시도해 주세요.",
     };
-    throw new Error(
-      `${messages[code] ?? "프로젝트를 삭제할 수 없습니다."} (${code})`,
-    );
+    throw new Error(messages[code] ?? "프로젝트를 삭제할 수 없습니다.");
   }
 }
 
@@ -233,7 +231,7 @@ export async function retryGitHubRepositoryCreation(
     "github-retry",
     {
       body: { projectId, action: "create_repository" },
-      fallbackMessage: "GitHub Repository 생성을 재시도할 수 없습니다.",
+      fallbackMessage: "GitHub 저장소 생성을 다시 시도할 수 없습니다.",
     },
   );
   return data.project;
@@ -260,6 +258,6 @@ export async function getGitHubRepositoryStatus(
 ): Promise<GitHubRepositoryStatus> {
   return invokeAuthenticatedFunction("github-repository-status", {
     body: { projectId },
-    fallbackMessage: "GitHub Repository 상태를 확인할 수 없습니다.",
+    fallbackMessage: "GitHub 저장소 상태를 확인할 수 없습니다.",
   });
 }

@@ -11,7 +11,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" && "h-8 px-3 text-xs",
         size === "md" && "h-10 px-4 text-sm",
         size === "lg" && "h-12 px-5 text-sm",
@@ -69,7 +69,7 @@ export function Modal({ open, onClose, title, description, children, className }
       <section role="dialog" aria-modal="true" aria-labelledby="modal-title" className={cn("max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:p-6", className)}>
         <div className="mb-5 flex items-start justify-between gap-4">
           <div><h2 id="modal-title" className="text-lg font-bold text-ink">{title}</h2>{description && <p className="mt-1 text-sm text-muted">{description}</p>}</div>
-          <Button variant="ghost" size="sm" aria-label="닫기" className="h-8 w-8 p-0" onClick={onClose}><X size={17} /></Button>
+          <Button variant="ghost" size="sm" aria-label="닫기" title="닫기" className="h-8 w-8 p-0" onClick={onClose}><X size={17} /></Button>
         </div>
         {children}
       </section>
@@ -83,11 +83,11 @@ export function EmptyState({ icon, title, description, action }: { icon: ReactNo
 }
 
 export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: ReactNode }) {
-  return <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div>{eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}<h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{title}</h1>{description && <p className="mt-1.5 max-w-2xl text-sm text-muted">{description}</p>}</div>{action}</div>;
+  return <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div className="min-w-0">{eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}<h1 className="break-words text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{title}</h1>{description && <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted">{description}</p>}</div>{action && <div className="flex flex-wrap items-center gap-2">{action}</div>}</div>;
 }
 
 export function StatCard({ label, value, detail, icon }: { label: string; value: ReactNode; detail?: string; icon: ReactNode }) {
-  return <div className="panel p-4 sm:p-5"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-muted">{label}</span><span className="text-brand">{icon}</span></div><div className="mt-3 text-2xl font-extrabold text-ink">{value}</div>{detail && <p className="mt-1 text-xs text-muted">{detail}</p>}</div>;
+  return <div className="panel flex h-full min-h-32 flex-col p-4 sm:p-5"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-muted">{label}</span><span className="shrink-0 text-brand">{icon}</span></div><div className="mt-auto pt-3 text-2xl font-extrabold text-ink">{value}</div>{detail && <p className="mt-1 min-h-4 text-xs text-muted">{detail}</p>}</div>;
 }
 
 export function Alert({ children, tone = "error", className }: { children: ReactNode; tone?: "error" | "info" | "success"; className?: string }) {

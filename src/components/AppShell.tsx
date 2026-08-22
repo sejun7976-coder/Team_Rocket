@@ -12,7 +12,6 @@ import {
   Settings,
   Shield,
   SlidersHorizontal,
-  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -20,6 +19,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { isSystemAdmin } from "../lib/authPolicy";
 import { cn } from "../lib/utils";
+import { formatRelativeTime } from "../lib/display";
 import {
   KEYRING_INACTIVITY_TIMEOUT_MS,
   readLastActivityAt,
@@ -36,11 +36,9 @@ import { useAuthStore } from "../stores/authStore";
 import { useProjectKeyStore } from "../stores/projectKeyStore";
 import { Avatar, Badge, Button } from "./ui";
 import { ThemeCycleButton } from "./ThemeCycleButton";
-import { useRocketAIStore } from "../stores/rocketAIStore";
-import { RocketAIPanel } from "./RocketAIPanel";
 
 const nav = [
-  ["/dashboard", "Dashboard", LayoutDashboard],
+  ["/dashboard", "대시보드", LayoutDashboard],
   ["/projects", "내 프로젝트", FolderKanban],
   ["/my-tasks", "내 작업", CheckSquare],
   ["/calendar", "일정", CalendarDays],
@@ -51,7 +49,6 @@ const adminNav = [
   ["/admin/users", "사용자 관리", Users],
   ["/admin/projects", "프로젝트 관리", FolderCog],
   ["/admin/system", "시스템 설정", SlidersHorizontal],
-  ["/admin/ai", "AI 설정", Sparkles],
 ] as const;
 
 function NavigationLink({
@@ -90,7 +87,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const queryClient = useQueryClient();
-  const openRocketAI = useRocketAIStore((state) => state.open);
   const routeProjectId = location.pathname.match(/^\/projects\/([0-9a-f-]{36})(?:\/|$)/iu)?.[1] ?? "";
   const currentProject = useQuery({
     queryKey: ["project", routeProjectId],
@@ -128,16 +124,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        openRocketAI();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openRocketAI]);
   useEffect(() => {
     if (!user) return;
     let lastActivity = readLastActivityAt() ?? Date.now();
@@ -192,7 +178,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Team Rocket
           </div>
           <div className="text-[9px] font-bold uppercase tracking-[.16em] text-muted">
-            Project workspace
+            프로젝트 관리
           </div>
         </div>
       </div>
@@ -241,6 +227,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button
               variant="ghost"
               className="absolute right-3 top-4 h-8 w-8 p-0"
+              aria-label="메뉴 닫기"
+              title="닫기"
               onClick={() => setMobileOpen(false)}
             >
               <X size={18} />
@@ -254,6 +242,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button
               variant="ghost"
               className="h-9 w-9 p-0 lg:hidden"
+              aria-label="메뉴 열기"
+              title="메뉴"
               onClick={() => setMobileOpen(true)}
             >
               <Menu size={19} />
@@ -264,21 +254,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              className="h-9 gap-2 px-2.5"
-              aria-label="Rocket AI 열기"
-              title="Rocket AI (Ctrl/⌘+K)"
-              onClick={openRocketAI}
-            >
-              <Sparkles size={17} />
-              <span className="hidden xl:inline">Rocket AI</span>
-            </Button>
             <div className="relative">
               <Button
                 variant="ghost"
                 className="relative h-9 w-9 p-0"
                 aria-label={`알림${unread ? ` ${unread}개 읽지 않음` : ""}`}
+                title="알림"
                 aria-expanded={notificationsOpen}
                 onClick={() => setNotificationsOpen((value) => !value)}
               >
@@ -304,10 +285,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                     {notifications.data?.slice(0, 10).map((notification) => (
                       <button key={notification.id} className={cn("flex w-full gap-3 p-3 text-left hover:bg-raised", !notification.read_at && "bg-brand/[.04]")} onClick={() => void openNotification(notification)}>
                         <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand" />
-                        <span className="min-w-0 flex-1"><span className="block text-sm font-semibold leading-5 text-ink">{notification.title}</span><span className="mt-1 block text-[10px] text-muted">{new Date(notification.created_at).toLocaleString("ko-KR")}</span></span>
+                        <span className="min-w-0 flex-1"><span className="block text-sm font-semibold leading-5 text-ink">{notification.title}</span><span className="mt-1 block text-[10px] text-muted">{formatRelativeTime(notification.created_at)}</span></span>
                       </button>
                     ))}
-                    {!notifications.data?.length && <p className="p-8 text-center text-sm text-muted">새 알림이 없습니다.</p>}
+                    {!notifications.data?.length && <p className="p-8 text-center text-sm text-muted">알림이 없습니다.<br />새로운 알림이 생기면 여기에 표시됩니다.</p>}
                   </div>
                   <button className="w-full border-t border-line px-4 py-3 text-xs font-semibold text-brand hover:bg-raised" onClick={() => { setNotificationsOpen(false); navigate("/notifications"); }}>
                     모든 알림 보기
@@ -332,7 +313,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
               {admin ? (
                 <Badge tone="purple" className="hidden xl:inline-flex">
-                  system admin
+                  시스템 관리자
                 </Badge>
               ) : (
                 profile?.github_username && (
@@ -346,7 +327,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main>{children}</main>
       </div>
-      <RocketAIPanel />
     </div>
   );
 }

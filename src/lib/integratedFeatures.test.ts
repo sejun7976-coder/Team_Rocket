@@ -5,17 +5,11 @@ import projectPages from "../pages/ProjectPages.tsx?raw";
 import secondaryPages from "../pages/ProjectSecondaryPages.tsx?raw";
 import projectService from "../services/projects.ts?raw";
 import fileService from "../services/files.ts?raw";
-import aiService from "../services/ai.ts?raw";
-import aiPanel from "../components/RocketAIPanel.tsx?raw";
 import settingsPage from "../pages/GlobalPages.tsx?raw";
 import appShell from "../components/AppShell.tsx?raw";
 import migration from "../../supabase/migrations/202608220008_task_atomic_and_ai.sql?raw";
 import deleteFunction from "../../supabase/functions/delete-github-repository/index.ts?raw";
 import retryFunction from "../../supabase/functions/github-retry/index.ts?raw";
-import aiFunction from "../../supabase/functions/ai-assistant/index.ts?raw";
-import adminAIFunction from "../../supabase/functions/admin-ai-settings/index.ts?raw";
-import gateway from "../../supabase/functions/_shared/ai/gateway.ts?raw";
-import configuration from "../../supabase/functions/_shared/ai/configuration.ts?raw";
 import { validateProjectFile } from "./filePolicy";
 
 describe("integrated project security features", () => {
@@ -36,13 +30,13 @@ describe("integrated project security features", () => {
     expect(projectPages).toContain("uploadProjectFile(projectId, file, task.id");
     expect(taskPage).toContain("TaskAttachments");
     expect(taskPage).toContain("deleteProjectFile");
-    expect(secondaryPages).toContain("연결된 작업:");
+    expect(secondaryPages).toContain("연결된 작업");
     expect(migration).toContain("grant delete on table public.files to authenticated");
   });
 
   it("rejects executable and oversized uploads", () => {
     expect(() => validateProjectFile({ name: "payload.exe", size: 10, type: "application/octet-stream" } as File)).toThrow(/실행/u);
-    expect(() => validateProjectFile({ name: "large.pdf", size: 50 * 1024 * 1024 + 1, type: "application/pdf" } as File)).toThrow(/50 MiB/u);
+    expect(() => validateProjectFile({ name: "large.pdf", size: 50 * 1024 * 1024 + 1, type: "application/pdf" } as File)).toThrow(/50 MB/u);
   });
 
   it("makes GitHub management owner-only in UI, direct route and server", () => {
@@ -59,27 +53,6 @@ describe("integrated project security features", () => {
     expect(deleteFunction.indexOf('storage.from("project-files").remove')).toBeLessThan(deleteFunction.indexOf('from("projects").delete()'));
     expect(deleteFunction).toContain("isRepositoryForProject");
     expect(projectService).toContain("STORAGE_CLEANUP_FAILED");
-  });
-
-  it("keeps the AI Gateway credential server-only and encrypted at rest", () => {
-    expect(migration).toContain("revoke all on table public.ai_provider_settings, public.ai_usage_logs from public, anon, authenticated");
-    expect(configuration).toContain('Deno.env.get("AI_CONFIG_MASTER_KEY")');
-    expect(configuration).toContain('"AES-GCM"');
-    expect(adminAIFunction).toContain("requireSystemAdmin(request)");
-    expect(adminAIFunction).not.toMatch(/return json\(request,\s*\{[^}]*apiKey/u);
-    expect(aiService).not.toContain("localStorage");
-    expect(aiService).not.toContain("sessionStorage");
-  });
-
-  it("authorizes project AI use, rate limits and returns proposals before mutation", () => {
-    expect(aiFunction).toContain("requireReadyUser(request)");
-    expect(aiFunction).toContain('from("project_members")');
-    expect(aiFunction).toContain('from("ai_usage_logs")');
-    expect(gateway).toContain("callAIGateway");
-    expect(gateway).toContain('response_format: { type: "json_object" }');
-    expect(aiPanel).toContain("제안은 확인 후에만 적용됩니다.");
-    expect(aiPanel.indexOf("const ask =")).toBeLessThan(aiPanel.indexOf("const apply ="));
-    expect(aiPanel).toContain("작업 생성");
   });
 
   it("removes technical crypto UI without changing key lock implementation", () => {

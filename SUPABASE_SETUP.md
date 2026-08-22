@@ -20,11 +20,11 @@ Migration은 반드시 순서대로 적용한다.
 5. `202608220005_recoverable_system_admin_bootstrap.sql`: partial bootstrap 상태 판별, 기존 Auth UUID 재사용, recovery finalize와 안전한 오류 코드
 6. `202608220006_idempotent_first_login.sql`: service-role 전용 최초 로그인 finalize RPC, profile/keyring 원자적 저장과 재시도 복구
 7. `202608220007_admin_project_access_logs.sql`: system_admin 전용 프로젝트 생성 DB 방어, 90일 접속 로그, Auth Audit Log 관리자 RPC
-8. `202608220008_task_atomic_and_ai.sql`: 암호화 작업 생성 RPC와 초기 AI 설정
-9. `202608220009_ai_registry_user_deletion_task_rpc.sql`: multi-provider AI registry, 사용자 완전 삭제 지원, task RPC 재게시
+8. `202608220008_task_atomic_and_ai.sql`: 암호화 작업 생성 RPC와 현재 사용하지 않는 과거 AI schema
+9. `202608220009_ai_registry_user_deletion_task_rpc.sql`: 현재 사용하지 않는 과거 AI registry, 사용자 완전 삭제 지원, task RPC 재게시
 10. `202608220010_fix_domain_activity_triggers.sql`: table별 활동 trigger 분리, `tasks` row에 없는 `user_id` 참조 제거
 11. `202608220011_fix_task_deletion.sql`: Task cascade 삭제 시 assignee DELETE trigger의 부모 재조회 실패 방지
-12. `202608220012_single_ai_gateway.sql`: service-role 전용 단일 AI Gateway와 32개 모델 registry, 전역 default 제약
+12. `202608220012_single_ai_gateway.sql`: 현재 사용하지 않는 과거 AI Gateway schema
 13. `202608220013_enhance_project_notification_types.sql`: task/comment/file/overdue notification enum 확장
 14. `202608220014_virtual_file_folders.sql`: 암호화된 가상 폴더 metadata, `files.folder_id`, GRANT와 RLS
 15. `202608220015_decouple_project_github_status.sql`: 선택형 GitHub 연동과 프로젝트 상태를 분리하는 service-role RPC
@@ -164,9 +164,6 @@ npx supabase functions deploy github-repository-status
 npx supabase functions deploy delete-github-repository
 npx supabase functions deploy record-access-event
 npx supabase functions deploy admin-list-access-logs
-npx supabase functions deploy ai-assistant
-npx supabase functions deploy ai-models
-npx supabase functions deploy admin-ai-settings
 npx supabase functions deploy delete-task
 ```
 
@@ -240,30 +237,3 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<PUBLISHABLE_KEY>
 ```
 
 설정 후 `npm run build` 결과물에 service role key나 GitHub token이 없는지 확인한다.
-
-## 9. Rocket AI 운영 설정
-
-Migration 012는 기존 provider별 table과 암호문을 삭제하지 않고 deprecated 상태로 보존하며, 실제 runtime을 `ai_gateway_settings` singleton과 `ai_model_settings` registry로 전환한다. 모든 활성 모델은 동일한 Gateway Base URL/API Key를 사용하고, `family`는 화면 그룹에만 사용한다. 기본 catalog는 32개이며 최초 default는 `gpt-5.6-sol`이다.
-
-이미 등록한 `AI_CONFIG_MASTER_KEY`는 **재생성하거나 rotate하지 않는다.** 기존 환경에서는 아래 Secret 생성 명령도 다시 실행하지 않는다. 신규 환경에서 Secret이 전혀 없을 때만 아래 PowerShell 명령으로 값을 화면에 출력하지 않고 한 번 등록한다.
-
-```powershell
-$rocketAiBytes = [byte[]]::new(32)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($rocketAiBytes)
-$rocketAiMasterKey = [Convert]::ToBase64String($rocketAiBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
-npx supabase secrets set "AI_CONFIG_MASTER_KEY=$rocketAiMasterKey" --project-ref joljmlyzhlwrlnbunusb
-Remove-Variable rocketAiMasterKey, rocketAiBytes
-```
-
-그 다음 변경 Function을 JWT 검증을 유지한 채 배포한다.
-
-```bash
-npx supabase functions deploy ai-assistant --project-ref joljmlyzhlwrlnbunusb
-npx supabase functions deploy ai-models --project-ref joljmlyzhlwrlnbunusb
-npx supabase functions deploy admin-ai-settings --project-ref joljmlyzhlwrlnbunusb
-npx supabase functions deploy delete-task --project-ref joljmlyzhlwrlnbunusb
-```
-
-system admin으로 `/#/admin/ai`를 열어 HTTPS Gateway Base URL과 Gateway API Key 하나를 저장한다. Key는 기존 `AI_CONFIG_MASTER_KEY`로 AES-GCM 암호화되어 저장되며, 저장 후 Browser에는 설정 여부만 반환되고 원문은 다시 표시되지 않는다. 운영 URL은 localhost, link-local, private IP를 거부하며 `AI_GATEWAY_ALLOWED_HOSTS` Secret을 쉼표 구분 hostname 목록으로 설정하면 exact host allowlist도 적용할 수 있다.
-
-같은 화면에서 사용할 모델만 활성화하고 정확히 하나를 default로 지정한다. default 모델은 다른 default를 지정하기 전에는 비활성화/삭제할 수 없다. builtin 모델은 삭제하지 않고 비활성화하며, 관리자가 추가한 custom 모델만 삭제할 수 있다. `ai_gateway_settings`와 `ai_model_settings`에는 anon/authenticated Data API 권한이 없고, 일반 사용자는 `ai-models`의 safe response로 활성 model setting UUID, model ID, family, 표시 이름만 받는다.

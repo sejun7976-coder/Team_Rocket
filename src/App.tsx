@@ -16,7 +16,6 @@ import {
   needsFirstLogin,
 } from "./lib/authPolicy";
 import {
-  AdminAISettingsPage,
   AdminProjectsPage,
   AdminSystemPage,
   AdminUsersPage,
@@ -156,7 +155,6 @@ export function App() {
               <Route path="admin/users" element={<AdminUsersPage />} />
               <Route path="admin/projects" element={<AdminProjectsPage />} />
               <Route path="admin/system" element={<AdminSystemPage />} />
-              <Route path="admin/ai" element={<AdminAISettingsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

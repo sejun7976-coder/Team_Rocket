@@ -8,13 +8,8 @@ test-results/
 !.env.example
 supabase/.env.local
 supabase/.temp/
+.supabase/
 *.log
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
-node_modules/
-dist/
-.env
-.env.local
-.env.*.local
-.supabase/
-*.tsbuildinfo

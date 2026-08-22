@@ -133,6 +133,23 @@ describe("authenticated Edge Function invocation", () => {
     expect(helperSource).not.toMatch(/console\.(?:log|info|warn|error)/u);
   });
 
+  it("shows a bounded public server message without exposing internal codes", async () => {
+    const response = new Response(JSON.stringify({
+      code: "REPOSITORY_NAME_CONFLICT",
+      error: "같은 이름의 GitHub 저장소가 이미 있습니다.",
+    }), { status: 409, headers: { "Content-Type": "application/json" } });
+    const fixture = clientWith({
+      currentSession: session("safe-session-token"),
+      invoke: async () => ({ data: null, error: { context: response }, response }),
+    });
+    const invoke = createAuthenticatedFunctionInvoker(fixture.client, () => NOW);
+    await expect(invoke("create-project", { fallbackMessage: "프로젝트를 만들 수 없습니다." }))
+      .rejects.toMatchObject({
+        code: "REPOSITORY_NAME_CONFLICT",
+        message: "같은 이름의 GitHub 저장소가 이미 있습니다.",
+      });
+  });
+
   it("supports the complete-first-login recovery payload through the common helper", async () => {
     const fixture = clientWith({
       currentSession: session("recovery-session-token"),

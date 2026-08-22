@@ -56,7 +56,8 @@ import {
   listTaskFiles,
   uploadProjectFile,
 } from "../services/files";
-import { canPreviewInBrowser, validateProjectFile } from "../lib/filePolicy";
+import { canPreviewInBrowser, MAX_FILE_SIZE_LABEL, validateProjectFile } from "../lib/filePolicy";
+import { taskPriorityLabels, taskStatusLabels } from "../lib/display";
 import { formatBytes } from "../lib/utils";
 
 function TaskAttachments({ task }: { task: Task }) {
@@ -128,12 +129,13 @@ function TaskAttachments({ task }: { task: Task }) {
   };
   return (
     <section className="panel p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <File size={18} className="text-brand" />
           <h2 className="font-extrabold text-ink">첨부 파일</h2>
           <Badge>{files.data?.length ?? 0}</Badge>
         </div>
+        <p className="text-[11px] text-muted">파일당 최대 {MAX_FILE_SIZE_LABEL}</p>
         <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:bg-raised">
           <Upload size={14} /> 파일 추가
           <input
@@ -192,7 +194,8 @@ function TaskAttachments({ task }: { task: Task }) {
                 size="sm"
                 variant="ghost"
                 className="text-red-600"
-                aria-label={`${file.filename} 삭제`}
+                aria-label={`${file.filename ?? "파일"} 삭제`}
+                title="파일 삭제"
                 onClick={async () => {
                   if (confirm("첨부 파일을 삭제할까요?")) {
                     await deleteProjectFile(file);
@@ -391,7 +394,7 @@ export function TaskPage() {
         to={`/projects/${task.project_id}/board`}
         className="mb-5 inline-flex items-center gap-2 text-xs font-semibold text-muted hover:text-brand"
       >
-        <ArrowLeft size={15} /> Board로 돌아가기
+        <ArrowLeft size={15} /> 보드로 돌아가기
       </Link>
       <div className="grid gap-5 xl:grid-cols-[1.5fr_.7fr]">
         <div className="space-y-5">
@@ -410,7 +413,7 @@ export function TaskPage() {
                             : "neutral"
                     }
                   >
-                    {task.status}
+                    {taskStatusLabels[task.status]}
                   </Badge>
                   <Badge
                     tone={
@@ -421,7 +424,7 @@ export function TaskPage() {
                           : "neutral"
                     }
                   >
-                    {task.priority}
+                    {taskPriorityLabels[task.priority]}
                   </Badge>
                 </div>
                 <h1 className="text-2xl font-extrabold tracking-tight text-ink">
@@ -430,7 +433,7 @@ export function TaskPage() {
               </div>
               {canDelete && (
                 <details className="relative">
-                  <summary aria-label="작업 메뉴" className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink">
+                  <summary aria-label="작업 메뉴" title="작업 메뉴" className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink">
                     <MoreVertical size={18} />
                   </summary>
                   <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-line bg-surface p-1 shadow-lift">
@@ -464,7 +467,7 @@ export function TaskPage() {
           </section>
           <section className="panel p-5 sm:p-6">
             <div className="flex items-center justify-between">
-              <h2 className="font-extrabold text-ink">Checklist</h2>
+              <h2 className="font-extrabold text-ink">체크리스트</h2>
               <span className="text-xs font-bold text-brand">
                 {task.progress_mode === "checklist"
                   ? checklistProgress
@@ -498,7 +501,7 @@ export function TaskPage() {
                 onChange={(event) => setNewChecklist(event.target.value)}
                 placeholder="체크리스트 항목"
               />
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" aria-label="체크리스트 항목 추가" title="추가">
                 <Plus size={15} />
               </Button>
             </form>
@@ -546,6 +549,8 @@ export function TaskPage() {
                             size="sm"
                             variant="ghost"
                             className="text-red-600"
+                            aria-label="댓글 삭제"
+                            title="댓글 삭제"
                             onClick={async () => {
                               await deleteComment(item.id);
                               await queryClient.invalidateQueries({
@@ -579,12 +584,14 @@ export function TaskPage() {
                             })
                           }
                         />
-                        <Button type="submit" size="sm">
+                        <Button type="submit" size="sm" aria-label="댓글 수정 저장" title="저장">
                           <Check size={14} />
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
+                          aria-label="댓글 수정 취소"
+                          title="취소"
                           onClick={() => setEditComment(null)}
                         >
                           <X size={14} />
@@ -604,7 +611,7 @@ export function TaskPage() {
                 className="field min-h-24"
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
-                placeholder="댓글을 입력하세요. Markdown, code block, @학번 mention을 지원합니다."
+                placeholder="댓글을 입력하세요. 마크다운과 @학번 멘션을 사용할 수 있습니다."
               />
               <div className="mt-2 flex justify-end">
                 <Button type="submit" disabled={!comment.trim()}>
@@ -628,7 +635,7 @@ export function TaskPage() {
                 mutation.mutate({ status: event.target.value as TaskStatus })
               }
             >
-              <option value="todo">TODO</option>
+              <option value="todo">할 일</option>
               <option value="in_progress">진행 중</option>
               <option value="review">검토</option>
               <option value="done">완료</option>
@@ -710,6 +717,8 @@ export function TaskPage() {
                     variant="ghost"
                     size="sm"
                     className="h-7 w-7 p-0 text-red-600"
+                    aria-label={`${assignee.profile?.name ?? "담당자"} 담당 해제`}
+                    title="담당 해제"
                     onClick={async () => {
                       await removeAssignee(task.id, assignee.user_id);
                       await refresh();

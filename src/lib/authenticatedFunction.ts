@@ -55,6 +55,18 @@ function safeCode(value: unknown): string | null {
   return typeof value === "string" && /^[A-Z][A-Z0-9_]{1,63}$/u.test(value) ? value : null;
 }
 
+function safePublicMessage(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const message = value.trim();
+  const hasControlCharacter = [...message].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127;
+  });
+  if (!message || message.length > 240 || !/[가-힣]/u.test(message) || hasControlCharacter) return null;
+  if (/(?:bearer\s+|eyJ[a-zA-Z0-9_-]{10,}|service[_ -]?role|api[_ -]?key)/iu.test(message)) return null;
+  return message;
+}
+
 async function functionError(
   error: unknown,
   response: Response | undefined,
@@ -62,15 +74,17 @@ async function functionError(
 ): Promise<AuthenticatedFunctionError> {
   const errorResponse = responseFromError(error, response);
   let code = errorResponse?.status === 401 ? "EDGE_FUNCTION_UNAUTHORIZED" : "EDGE_FUNCTION_REQUEST_FAILED";
+  let message = fallbackMessage;
   if (errorResponse) {
     try {
-      const payload = await errorResponse.clone().json() as { code?: unknown };
+      const payload = await errorResponse.clone().json() as { code?: unknown; error?: unknown };
       code = safeCode(payload.code) ?? code;
+      message = safePublicMessage(payload.error) ?? message;
     } catch {
       // 오류 body 원문은 UI나 로그로 전달하지 않는다.
     }
   }
-  return new AuthenticatedFunctionError(code, fallbackMessage, errorResponse?.status);
+  return new AuthenticatedFunctionError(code, message, errorResponse?.status);
 }
 
 function authorizationHeaders(headers: FunctionInvokeOptions["headers"], accessToken: string): Record<string, string> {

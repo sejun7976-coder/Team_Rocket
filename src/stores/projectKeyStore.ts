@@ -24,7 +24,7 @@ export const useProjectKeyStore = create<ProjectKeyStore>((set, get) => ({
     const existing = get().keys.get(projectId);
     if (existing) return existing;
     const { user, keyring } = useAuthStore.getState();
-    if (!user || !keyring) throw new Error("먼저 사용자 keyring을 잠금 해제하세요.");
+    if (!user || !keyring) throw new Error("먼저 보안 잠금을 해제하세요.");
     set({ unlocking: projectId });
     try {
       const { data, error } = await supabase.from("project_keys")

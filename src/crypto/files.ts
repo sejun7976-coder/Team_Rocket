@@ -5,7 +5,9 @@ import type { EncryptedFileResult } from "./types";
 
 const MAGIC = new Uint8Array([0x52, 0x56, 0x46, 0x31]); // RVF1
 export const FILE_CHUNK_BYTES = 4 * 1024 * 1024;
-export const MAX_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_FILE_MEBIBYTES = 50;
+export const MAX_FILE_BYTES = MAX_FILE_MEBIBYTES * 1024 * 1024;
+export const MAX_FILE_SIZE_LABEL = `${MAX_FILE_MEBIBYTES} MB`;
 
 function chunkAad(projectId: string, fileId: string, index: number): Uint8Array {
   return utf8(`rocket:v1:${projectId}:file:${fileId}:${index}`);
@@ -34,7 +36,7 @@ export async function encryptFile(
   fileId: string,
   onProgress?: (percent: number) => void
 ): Promise<EncryptedFileResult> {
-  if (file.size > MAX_FILE_BYTES) throw new Error("파일은 50 MiB 이하여야 합니다.");
+  if (file.size > MAX_FILE_BYTES) throw new Error(`파일은 ${MAX_FILE_SIZE_LABEL} 이하여야 합니다.`);
   const chunkCount = Math.max(1, Math.ceil(file.size / FILE_CHUNK_BYTES));
   const header = new Uint8Array(8);
   header.set(MAGIC, 0);

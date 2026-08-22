@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import app from "../App.tsx?raw";
 import appShell from "../components/AppShell.tsx?raw";
-import aiPanel from "../components/RocketAIPanel.tsx?raw";
 import newProjectDialog from "../components/NewProjectDialog.tsx?raw";
 import dashboard from "../pages/DashboardPage.tsx?raw";
 import projectPages from "../pages/ProjectPages.tsx?raw";
@@ -10,7 +9,6 @@ import activityService from "../services/activity.ts?raw";
 import fileService from "../services/files.ts?raw";
 import createProject from "../../supabase/functions/create-project/index.ts?raw";
 import githubStatus from "../../supabase/functions/github-repository-status/index.ts?raw";
-import aiAssistant from "../../supabase/functions/ai-assistant/index.ts?raw";
 import notificationTypesMigration from "../../supabase/migrations/202608220013_enhance_project_notification_types.sql?raw";
 import notificationsMigration from "../../supabase/migrations/202608220016_materialize_project_notifications.sql?raw";
 import foldersMigration from "../../supabase/migrations/202608220014_virtual_file_folders.sql?raw";
@@ -44,7 +42,7 @@ describe("Team Rocket product direction", () => {
   });
 
   it("turns Overview into a project dashboard", () => {
-    for (const label of ["프로젝트 진행률", "전체 작업", "내 작업", "마감 임박", "최근 Activity", "팀 현황"]) {
+    for (const label of ["프로젝트 진행률", "전체 작업", "내 작업", "마감 임박", "최근 활동", "팀 현황"]) {
       expect(projectPages).toContain(label);
     }
     expect(projectPages).toContain("overdue");
@@ -69,20 +67,11 @@ describe("Team Rocket product direction", () => {
     expect(fileService).toContain('contentType: "application/octet-stream"');
     expect(fileService).toContain("createFileFolder");
     expect(fileService).toContain("moveProjectFile");
-    for (const label of ["파일 이름 검색", "이름순", "모든 업로더", "모든 유형", "연결된 작업:"]) {
+    for (const label of ["파일 이름 검색", "이름순", "모든 업로더", "모든 유형", "연결된 작업"]) {
       expect(secondaryPages).toContain(label);
     }
     expect(foldersMigration).toContain("create table public.file_folders");
     expect(foldersMigration).toContain("folder_id uuid");
   });
 
-  it("gives Rocket AI bounded project metadata and optional recent commits", () => {
-    expect(aiPanel).toContain("activities:");
-    expect(aiPanel).toContain("files:");
-    expect(aiPanel).not.toContain("file.content");
-    expect(aiAssistant).toContain('"project_summary", "weekly_report"');
-    expect(aiAssistant).toContain("File context contains metadata only");
-    expect(aiAssistant).toContain("githubActivity = []");
-    expect(aiAssistant).toContain("currentUserId: user.id");
-  });
 });
