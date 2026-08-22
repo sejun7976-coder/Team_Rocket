@@ -4,7 +4,7 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-
 import { AppShell } from "./components/AppShell";
 import { Spinner } from "./components/ui";
 import { canEnterBusinessRoutes, isSystemAdmin, needsFirstLogin } from "./lib/authPolicy";
-import { AdminProjectsPage, AdminSystemPage, AdminUsersPage } from "./pages/AdminPages";
+import { AdminAISettingsPage, AdminProjectsPage, AdminSystemPage, AdminUsersPage } from "./pages/AdminPages";
 import { FirstLoginPage, LoginPage, UnlockPage } from "./pages/AuthPages";
 import { DashboardPage, ProjectsPage } from "./pages/DashboardPage";
 import { GlobalActivityPage, GlobalCalendarPage, MyTasksPage, NotificationsPage, SettingsPage } from "./pages/GlobalPages";
@@ -91,6 +91,7 @@ export function App() {
         <Route path="admin/users" element={<AdminUsersPage />} />
         <Route path="admin/projects" element={<AdminProjectsPage />} />
         <Route path="admin/system" element={<AdminSystemPage />} />
+        <Route path="admin/ai" element={<AdminAISettingsPage />} />
       </Route>
     </Route>
     <Route path="*" element={<Navigate to="/dashboard" replace />} />

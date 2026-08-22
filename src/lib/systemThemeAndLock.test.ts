@@ -10,6 +10,7 @@ import earlyThemeSource from "../../public/theme-init.js?raw";
 import {
   applyThemePreference,
   initializeThemePreference,
+  nextThemePreference,
   readThemePreference,
   THEME_STORAGE_KEY,
   useThemeStore
@@ -71,14 +72,14 @@ describe("theme preference and automatic key-lock UX", () => {
     expect(tailwindSource).toContain("darkMode: [\"selector\", '[data-theme=\"dark\"]']");
   });
 
-  it("offers System, Light, and Dark in the header and Settings", () => {
-    for (const source of [appShellSource, settingsSource]) {
-      expect(source).toContain('<option value="system">시스템</option>');
-      expect(source).toContain('<option value="light">라이트</option>');
-      expect(source).toContain('<option value="dark">다크</option>');
-    }
-    expect(appShellSource).toContain('aria-label="테마"');
-    expect(settingsSource).toContain('id="settings-theme"');
+  it("cycles System, Light, and Dark one click at a time without a select", () => {
+    expect(nextThemePreference("system")).toBe("light");
+    expect(nextThemePreference("light")).toBe("dark");
+    expect(nextThemePreference("dark")).toBe("system");
+    expect(appShellSource).toContain("ThemeCycleButton");
+    expect(settingsSource).toContain("ThemeCycleButton");
+    expect(appShellSource).not.toContain('aria-label="테마"');
+    expect(settingsSource).not.toContain('id="settings-theme"');
   });
 
   it("uses theme variables on login, first-login, unlock, settings, and modal surfaces", () => {
@@ -93,8 +94,8 @@ describe("theme preference and automatic key-lock UX", () => {
     expect(appShellSource).not.toContain("프로젝트 암호화 키를 잠급니다. 로그인 상태는 유지됩니다.");
     expect(appShellSource).toContain("KEYRING_INACTIVITY_TIMEOUT_MS");
     expect(appShellSource).toContain("await lockKeyring()");
-    expect(settingsSource).toContain("자동 키 잠금");
-    expect(settingsSource).toContain("15분");
-    expect(settingsSource).toContain("프로젝트 암호화 키는 활성 세션에서만 사용할 수 있으며, 15분 동안 활동이 없으면 자동으로 잠깁니다.");
+    expect(appShellSource).toContain("KEYRING_INACTIVITY_TIMEOUT_MS");
+    expect(settingsSource).not.toContain("사용자 keyring");
+    expect(settingsSource).not.toContain("P-256 ECDH");
   });
 });

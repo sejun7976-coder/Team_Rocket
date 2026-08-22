@@ -25,8 +25,8 @@ serve(async (request) => {
     admin.from("project_members").select("role").eq("project_id", projectId).eq("user_id", user.id).single(),
     admin.from("projects").select("id, created_by, description, visibility, github_repository_name").eq("id", projectId).single()
   ]);
-  if (!["owner", "admin"].includes(actor?.role ?? "")) {
-    throw new ApiError(403, "ADMIN_REQUIRED", "동기화를 재시도할 권한이 없습니다.");
+  if (!actor || (action === "create_repository" ? actor.role !== "owner" : !["owner", "admin"].includes(actor.role))) {
+    throw new ApiError(403, action === "create_repository" ? "PROJECT_OWNER_REQUIRED" : "ADMIN_REQUIRED", "동기화를 재시도할 권한이 없습니다.");
   }
   if (!project) throw new ApiError(404, "PROJECT_NOT_FOUND", "프로젝트를 찾을 수 없습니다.");
 

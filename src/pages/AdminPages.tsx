@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderKanban, History, KeyRound, Plus, Settings2, ShieldCheck, UserCheck, UserRoundX, Users } from "lucide-react";
+import { FolderKanban, History, KeyRound, Plus, Settings2, ShieldCheck, Sparkles, Trash2, UserCheck, UserRoundX, Users } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, EmptyState, Input, Modal, PageHeader, Spinner } from "../components/ui";
 import {
@@ -14,6 +14,7 @@ import {
   type AccessLogEventType
 } from "../services/admin";
 import { useAuthStore } from "../stores/authStore";
+import { deleteAIKey, getAISettings, saveAISettings, testAIConnection } from "../services/ai";
 
 const statusLabels: Record<AdminUserStatus, string> = {
   initial_login_pending: "최초 로그인 전",
@@ -140,7 +141,20 @@ export function AdminProjectsPage() {
 export function AdminSystemPage() {
   return <div className="page-wrap">
     <PageHeader eyebrow="Admin" title="시스템 설정" description="배포 환경에서 확인해야 할 인증·보안 정책입니다." />
-    <div className="grid gap-4 md:grid-cols-2"><section className="panel p-5"><div className="flex items-center gap-2 text-ink"><ShieldCheck className="text-brand" size={20} /><h2 className="font-extrabold">Auth 정책</h2></div><dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between"><dt className="text-muted">Public signup</dt><dd className="font-bold text-ink">비활성화</dd></div><div className="flex justify-between"><dt className="text-muted">Minimum password length</dt><dd className="font-bold text-ink">6</dd></div><div className="flex justify-between"><dt className="text-muted">초기 비밀번호</dt><dd className="font-mono font-black text-ink">1234</dd></div><div className="flex justify-between"><dt className="text-muted">내부 이메일 노출</dt><dd className="font-bold text-ink">없음</dd></div></dl></section><section className="panel p-5"><div className="flex items-center gap-2 text-ink"><Settings2 className="text-brand" size={20} /><h2 className="font-extrabold">운영 확인</h2></div><ul className="mt-4 space-y-3 text-sm text-muted"><li>• Migration 001~007 순서대로 적용</li><li>• Authentication Audit Logs DB 저장 활성화</li><li>• FRONTEND_URL과 service role secret 확인</li><li>• 최초 관리자 one-time bootstrap 완료</li></ul></section></div>
+    <div className="grid gap-4 md:grid-cols-2"><section className="panel p-5"><div className="flex items-center gap-2 text-ink"><ShieldCheck className="text-brand" size={20} /><h2 className="font-extrabold">Auth 정책</h2></div><dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between"><dt className="text-muted">Public signup</dt><dd className="font-bold text-ink">비활성화</dd></div><div className="flex justify-between"><dt className="text-muted">Minimum password length</dt><dd className="font-bold text-ink">6</dd></div><div className="flex justify-between"><dt className="text-muted">초기 비밀번호</dt><dd className="font-mono font-black text-ink">1234</dd></div><div className="flex justify-between"><dt className="text-muted">내부 이메일 노출</dt><dd className="font-bold text-ink">없음</dd></div></dl></section><section className="panel p-5"><div className="flex items-center gap-2 text-ink"><Settings2 className="text-brand" size={20} /><h2 className="font-extrabold">운영 확인</h2></div><ul className="mt-4 space-y-3 text-sm text-muted"><li>• Migration 001~008 순서대로 적용</li><li>• Authentication Audit Logs DB 저장 활성화</li><li>• FRONTEND_URL과 service role secret 확인</li><li>• 최초 관리자 one-time bootstrap 완료</li></ul></section></div>
     <Alert tone="info" className="mt-5">실제 Supabase Dashboard 설정 절차는 SUPABASE_SETUP.md에 정리되어 있습니다.</Alert>
   </div>;
+}
+
+export function AdminAISettingsPage() {
+  const queryClient = useQueryClient();
+  const settings = useQuery({ queryKey: ["admin-ai-settings"], queryFn: getAISettings });
+  const [enabled, setEnabled] = useState(false);
+  const [model, setModel] = useState("gpt-4.1-mini");
+  const [apiKey, setApiKey] = useState("");
+  useEffect(() => { if (settings.data) { setEnabled(settings.data.enabled); setModel(settings.data.model); } }, [settings.data]);
+  const save = useMutation({ mutationFn: () => saveAISettings({ enabled, provider: "openai", model: model.trim(), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }), onSuccess: async () => { setApiKey(""); await queryClient.invalidateQueries({ queryKey: ["admin-ai-settings"] }); } });
+  const remove = useMutation({ mutationFn: deleteAIKey, onSuccess: async () => { setApiKey(""); setEnabled(false); await queryClient.invalidateQueries({ queryKey: ["admin-ai-settings"] }); } });
+  const test = useMutation({ mutationFn: testAIConnection });
+  return <div className="page-wrap max-w-3xl"><PageHeader eyebrow="Admin" title="AI 설정" description="Rocket AI provider 자격 증명은 서버에서 암호화되며 저장 후 다시 표시되지 않습니다." /><section className="panel p-5 sm:p-6"><div className="flex items-center gap-2"><Sparkles className="text-brand" size={20} /><h2 className="font-extrabold text-ink">Rocket AI</h2></div>{settings.isLoading ? <Spinner className="mt-5" /> : <><label className="mt-5 flex items-center justify-between rounded-xl border border-line p-3"><div><div className="text-sm font-semibold text-ink">AI 기능</div><div className="text-xs text-muted">프로젝트 멤버에게 Rocket AI 사용 허용</div></div><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /></label><label className="label mt-4" htmlFor="ai-provider">Provider</label><Input id="ai-provider" value="OpenAI" disabled /><label className="label mt-4" htmlFor="ai-model">Model</label><Input id="ai-model" value={model} onChange={(event) => setModel(event.target.value)} maxLength={100} /><label className="label mt-4" htmlFor="ai-key">API Key</label><Input id="ai-key" type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={settings.data?.configured ? "새 Key를 입력할 때만 교체됩니다" : "API Key 입력"} /><div className="mt-2 text-xs font-semibold text-muted">{settings.data?.configured ? "✓ API Key 설정됨" : "API Key 설정되지 않음"}</div>{(settings.error || save.error || remove.error || test.error) && <Alert className="mt-4">{settings.error?.message ?? save.error?.message ?? remove.error?.message ?? test.error?.message}</Alert>}{save.isSuccess && <Alert tone="success" className="mt-4">AI 설정을 저장했습니다.</Alert>}{test.isSuccess && <Alert tone="success" className="mt-4">AI provider 연결이 정상입니다.</Alert>}<div className="mt-5 flex flex-wrap gap-2"><Button disabled={!model.trim() || save.isPending} onClick={() => save.mutate()}>저장/교체</Button><Button variant="secondary" disabled={!settings.data?.configured || test.isPending} onClick={() => test.mutate()}>연결 테스트</Button><Button variant="ghost" className="text-red-600" disabled={!settings.data?.configured || remove.isPending} onClick={() => { if (confirm("저장된 AI API Key를 삭제할까요?")) remove.mutate(); }}><Trash2 size={15} /> API Key 삭제</Button></div></>}</section></div>;
 }

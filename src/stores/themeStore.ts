@@ -2,6 +2,11 @@ import { create } from "zustand";
 
 export type ThemePreference = "system" | "light" | "dark";
 export const THEME_STORAGE_KEY = "rocket-theme";
+const THEME_SEQUENCE: readonly ThemePreference[] = ["system", "light", "dark"];
+
+export function nextThemePreference(current: ThemePreference): ThemePreference {
+  return THEME_SEQUENCE[(THEME_SEQUENCE.indexOf(current) + 1) % THEME_SEQUENCE.length] ?? "system";
+}
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return value === "system" || value === "light" || value === "dark";
@@ -30,6 +35,7 @@ export function applyThemePreference(preference: ThemePreference): void {
 interface ThemeStore {
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
+  cyclePreference: () => void;
 }
 
 const initialPreference = readThemePreference();
@@ -37,6 +43,12 @@ const initialPreference = readThemePreference();
 export const useThemeStore = create<ThemeStore>((set) => ({
   preference: initialPreference,
   setPreference: (preference) => {
+    try { localStorage.setItem(THEME_STORAGE_KEY, preference); } catch { /* theme still applies for this page */ }
+    applyThemePreference(preference);
+    set({ preference });
+  },
+  cyclePreference: () => {
+    const preference = nextThemePreference(useThemeStore.getState().preference);
     try { localStorage.setItem(THEME_STORAGE_KEY, preference); } catch { /* theme still applies for this page */ }
     applyThemePreference(preference);
     set({ preference });

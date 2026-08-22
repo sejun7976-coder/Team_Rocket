@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { Blob as NodeBlob, File as NodeFile } from "node:buffer";
 import { base64UrlDecode, base64UrlEncode } from "./encoding";
 import { decryptContent, encryptContent } from "./content";
 import { createUserKeyring, protectUnlockedUserKeyring, unlockUserKeyring } from "./keyring";
 import { createProjectKey, unwrapProjectKey, wrapExistingProjectKey } from "./projectKeys";
+import { decryptFile, encryptFile } from "./files";
 
 const projectId = "01932cb8-9c2a-7e0f-8a16-123456789abc";
 const ownerId = "01932cb8-9c2a-7e0f-8a16-123456789abd";
@@ -61,4 +63,17 @@ describe("client cryptography", () => {
     const again = await encryptContent("SECRET_TEST_COMMENT_18291", project.projectKey, context);
     expect(again.iv).not.toBe(envelope.iv);
   }, 30_000);
+
+  it("round-trips encrypted attachment bytes without placing plaintext in the Storage blob", async () => {
+    vi.stubGlobal("Blob", NodeBlob);
+    vi.stubGlobal("File", NodeFile);
+    const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    const original = new TextEncoder().encode("CONFIDENTIAL_ATTACHMENT_BYTES_48291");
+    const fileId = crypto.randomUUID();
+    const encrypted = await encryptFile(new File([original], "notes.txt", { type: "text/plain" }), key, projectId, fileId);
+    expect(await encrypted.encryptedBlob.text()).not.toContain("CONFIDENTIAL_ATTACHMENT_BYTES_48291");
+    const decrypted = await decryptFile(encrypted.encryptedBlob, key, projectId, fileId, encrypted.checksum, "text/plain");
+    expect(Array.from(new Uint8Array(await decrypted.arrayBuffer()))).toEqual(Array.from(original));
+    vi.unstubAllGlobals();
+  });
 });

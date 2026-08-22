@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(60);
+select plan(68);
 
 -- Exact browser privilege matrix. Extra privileges fail this test just like missing ones.
 with expected(table_name, can_select, can_insert, can_update, can_delete) as (values
@@ -9,17 +9,19 @@ with expected(table_name, can_select, can_insert, can_update, can_delete) as (va
   ('projects', true, false, true, false),
   ('project_members', true, false, false, false),
   ('project_keys', true, false, false, false),
-  ('tasks', true, true, true, true),
+  ('tasks', true, true, true, false),
   ('task_assignees', true, true, false, true),
   ('task_checklist_items', true, true, true, false),
   ('comments', true, true, true, false),
   ('activities', true, false, false, false),
-  ('files', true, true, false, false),
+  ('files', true, true, false, true),
   ('notifications', true, false, true, false),
   ('github_sync_jobs', true, false, false, false),
   ('admin_audit_logs', false, false, false, false),
   ('system_admin_bootstrap_state', false, false, false, false),
-  ('user_access_logs', false, false, false, false)
+  ('user_access_logs', false, false, false, false),
+  ('ai_provider_settings', false, false, false, false),
+  ('ai_usage_logs', false, false, false, false)
 )
 select ok(
   has_table_privilege('authenticated', format('public.%I', table_name), 'SELECT') = can_select
@@ -38,7 +40,7 @@ with business_tables(table_name) as (values
   ('profiles'), ('projects'), ('project_members'), ('project_keys'), ('tasks'),
   ('task_assignees'), ('task_checklist_items'), ('comments'), ('activities'),
   ('files'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
-  ('system_admin_bootstrap_state'), ('user_access_logs')
+  ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_usage_logs')
 )
 select ok(
   not has_table_privilege('anon', format('public.%I', table_name), 'SELECT')
@@ -57,7 +59,7 @@ with business_tables(table_name) as (values
   ('profiles'), ('projects'), ('project_members'), ('project_keys'), ('tasks'),
   ('task_assignees'), ('task_checklist_items'), ('comments'), ('activities'),
   ('files'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
-  ('system_admin_bootstrap_state'), ('user_access_logs')
+  ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_usage_logs')
 )
 select ok(
   coalesce((
@@ -76,17 +78,19 @@ with expected(table_name, can_select, can_insert, can_update, can_delete) as (va
   ('projects', true, false, true, false),
   ('project_members', true, false, false, false),
   ('project_keys', true, false, false, false),
-  ('tasks', true, true, true, true),
+  ('tasks', true, true, true, false),
   ('task_assignees', true, true, false, true),
   ('task_checklist_items', true, true, true, false),
   ('comments', true, true, true, false),
   ('activities', true, false, false, false),
-  ('files', true, true, false, false),
+  ('files', true, true, false, true),
   ('notifications', true, false, true, false),
   ('github_sync_jobs', true, false, false, false),
   ('admin_audit_logs', false, false, false, false),
   ('system_admin_bootstrap_state', false, false, false, false),
-  ('user_access_logs', false, false, false, false)
+  ('user_access_logs', false, false, false, false),
+  ('ai_provider_settings', false, false, false, false),
+  ('ai_usage_logs', false, false, false, false)
 )
 select ok(
   (not can_select or exists (select 1 from pg_catalog.pg_policies where schemaname = 'public' and tablename = table_name and cmd in ('SELECT', 'ALL') and ('authenticated' = any(roles) or 'public' = any(roles))))

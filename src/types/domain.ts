@@ -146,6 +146,7 @@ export interface ProjectFile {
   deleted_at: string | null;
   created_at: string;
   uploader?: Pick<Profile, "id" | "name" | "avatar_url">;
+  task?: Pick<Task, "id" | "title"> | null;
 }
 
 export interface Notification {

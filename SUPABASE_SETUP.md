@@ -153,6 +153,9 @@ npx supabase functions deploy github-retry
 npx supabase functions deploy delete-github-repository
 npx supabase functions deploy record-access-event
 npx supabase functions deploy admin-list-access-logs
+npx supabase functions deploy ai-assistant
+npx supabase functions deploy admin-ai-settings
+npx supabase functions deploy delete-task
 ```
 
 상시 배포하는 모든 Function은 JWT 검증을 유지하며 `--no-verify-jwt`로 배포하지 않는다. 유일한 예외는 3절의 CLI가 배포 후 즉시 삭제하는 일회성 `bootstrap-system-admin`이다. `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`는 hosted Edge Function에 기본 제공되는 값을 사용한다.
@@ -223,3 +226,25 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<PUBLISHABLE_KEY>
 ```
 
 설정 후 `npm run build` 결과물에 service role key나 GitHub token이 없는지 확인한다.
+
+## 9. Rocket AI 운영 설정
+
+Migration을 적용한 뒤 random 256-bit `AI_CONFIG_MASTER_KEY`를 한 번 등록한다. 아래 PowerShell 명령은 값을 화면에 출력하지 않고 생성·등록한 뒤 변수에서 제거한다.
+
+```powershell
+$rocketAiBytes = [byte[]]::new(32)
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($rocketAiBytes)
+$rocketAiMasterKey = [Convert]::ToBase64String($rocketAiBytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+npx supabase secrets set "AI_CONFIG_MASTER_KEY=$rocketAiMasterKey" --project-ref joljmlyzhlwrlnbunusb
+Remove-Variable rocketAiMasterKey, rocketAiBytes
+```
+
+그 다음 변경 Function을 JWT 검증을 유지한 채 배포한다.
+
+```bash
+npx supabase functions deploy ai-assistant --project-ref joljmlyzhlwrlnbunusb
+npx supabase functions deploy admin-ai-settings --project-ref joljmlyzhlwrlnbunusb
+npx supabase functions deploy delete-task --project-ref joljmlyzhlwrlnbunusb
+```
+
+system admin으로 `/#/admin/ai`를 열어 OpenAI model과 API Key를 입력한다. 저장 후 Browser에는 Key가 다시 반환되지 않는다. Key는 `AI_CONFIG_MASTER_KEY`로 AES-GCM 암호화되어 `ai_provider_settings`에 저장되며 이 table은 anon/authenticated Data API 권한이 없다.

@@ -89,7 +89,10 @@ describe("Edge Function CORS policy", () => {
       "remove-project-member",
       "sync-project-member",
       "record-access-event",
-      "admin-list-access-logs"
+      "admin-list-access-logs",
+      "ai-assistant",
+      "admin-ai-settings",
+      "delete-task"
     ];
     expect(Object.keys(edgeFunctionSources)).toHaveLength(expectedFunctions.length);
     for (const functionName of expectedFunctions) {

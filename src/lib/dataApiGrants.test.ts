@@ -5,6 +5,7 @@ import explicitGrantsSql from "../../supabase/migrations/202608220003_explicit_d
 import bootstrapSql from "../../supabase/migrations/202608220004_system_admin_bootstrap.sql?raw";
 import recoveryBootstrapSql from "../../supabase/migrations/202608220005_recoverable_system_admin_bootstrap.sql?raw";
 import accessLogSql from "../../supabase/migrations/202608220007_admin_project_access_logs.sql?raw";
+import taskAndAISql from "../../supabase/migrations/202608220008_task_atomic_and_ai.sql?raw";
 
 const authenticatedPrivileges = {
   profiles: ["select", "update"],
@@ -80,5 +81,15 @@ describe("Supabase Data API authorization contract", () => {
     expect(sql).not.toMatch(/grant\s+[\s\S]*?user_access_logs[\s\S]*?\s+to\s+(anon|authenticated)\s*;/iu);
     expect(sql).toContain("revoke all on function public.list_auth_audit_logs_admin");
     expect(sql).toContain("to service_role;");
+  });
+
+  it("routes destructive task cleanup through Edge and keeps AI tables service-role-only", () => {
+    const sql = taskAndAISql.toLowerCase();
+    expect(sql).toContain("grant delete on table public.files to authenticated;");
+    expect(sql).toContain("revoke delete on table public.tasks from authenticated;");
+    expect(sql).toContain("alter table public.ai_provider_settings enable row level security;");
+    expect(sql).toContain("alter table public.ai_usage_logs enable row level security;");
+    expect(sql).toContain("revoke all on table public.ai_provider_settings, public.ai_usage_logs from public, anon, authenticated;");
+    expect(sql).toContain("grant all on table public.ai_provider_settings, public.ai_usage_logs to service_role;");
   });
 });

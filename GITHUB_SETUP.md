@@ -44,8 +44,12 @@ GitHub REST API version은 지원 기간이 명시된 `2022-11-28`로 고정한�
 
 ## 검증
 
-1. 관리자 또는 일반 사용자로 로그인한다.
+1. Project Owner로 로그인한다.
 2. 새 프로젝트와 유일한 repository 이름을 입력한다.
 3. 생성 후 Project > GitHub에서 실제 private repository URL을 연다.
 4. Project > Team에서 GitHub Username이 있는 사용자를 추가한다.
 5. GitHub collaborator invitation과 `github_sync_status`를 확인한다.
+
+GitHub 탭과 수동 Repository 생성/삭제는 Project Owner 전용이다. Admin/member는 탭을 보지 못하며 직접 Hash URL로 접근해도 Overview로 이동한다. Team 화면의 기존 collaborator 추가/제거 동기화는 Owner/Admin이 계속 수행할 수 있다.
+
+영구 삭제는 GitHub Repository를 먼저 삭제한 후 private Storage와 DB Project를 정리한다. Repository가 이미 404이면 idempotent 완료로 처리하지만 GitHub 인증·권한·network 오류이면 DB Project를 삭제하지 않는다.

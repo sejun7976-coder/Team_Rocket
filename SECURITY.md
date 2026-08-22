@@ -58,6 +58,18 @@ GitHub token/App credential은 Supabase Edge Function secret에만 저장한다.
 
 Repository의 idempotency marker는 고정된 가상 domain이 아니라 검증된 `PROJECT_MANAGER_URL`과 Project UUID로 만든다. Hosted 환경은 HTTPS URL을 필수로 요구하고, query·fragment·credential이 포함된 URL을 거부한다.
 
+수동 Repository 생성 재시도, GitHub 관리 화면, Project/Repository 영구 삭제는 Project Owner만 사용할 수 있다. Team의 collaborator 자동 동기화는 Owner/Admin 관리 권한을 유지한다. 영구 삭제는 Repository marker가 현재 Project UUID와 일치할 때만 GitHub DELETE를 수행하며 401/403/5xx이면 DB Project를 보존한다.
+
+## AI provider credential과 context
+
+- Provider API key는 Frontend env와 browser storage에 두지 않고 `admin-ai-settings`로만 입력한다.
+- `AI_CONFIG_MASTER_KEY`는 Supabase Edge Function Secret인 random 256-bit key이며 provider key와 별개다.
+- Provider key는 AES-GCM ciphertext/IV로만 `ai_provider_settings`에 저장되고 service role만 table에 접근한다. Admin GET도 원문/ciphertext를 반환하지 않는다.
+- `ai-assistant`는 ready user와 Project membership을 확인하고 user별 rate limit과 timeout을 적용한다.
+- Project context는 browser에서 권한 있는 사용자가 복호화해 요청 시 최소화한다. Project key/keyring/Auth credential/JWT/GitHub PAT와 첨부 원문은 전송하지 않는다.
+- Usage audit에는 prompt와 업무 plaintext를 저장하지 않는다. Provider 오류 body도 사용자나 log에 전달하지 않는다.
+- AI mutation 결과는 structured proposal이며 사용자 확인 전에는 application service를 호출하지 않는다.
+
 ## XSS와 Markdown
 
 사용자 Markdown은 HTML로 변환해 주입하지 않는다. React node 기반 제한 renderer가 text, code block, mention만 표시한다. HTML은 항상 text로 취급한다. Production bundle은 meta CSP로 self-only script, `object-src 'none'`, `base-uri 'none'`를 설정한다. GitHub Pages는 사용자 지정 response header를 지원하지 않으므로 `frame-ancestors`는 적용할 수 없다. Clickjacking 방어가 필수인 배포에서는 Pages 앞에 CDN을 두고 response header `Content-Security-Policy: frame-ancestors 'none'`를 추가해야 한다.

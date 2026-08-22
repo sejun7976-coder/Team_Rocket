@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../stores/authStore";
 import { useProjectKeyStore } from "../stores/projectKeyStore";
 import type { ChecklistItem, Comment, Task, TaskPriority, TaskStatus } from "../types/domain";
+import { invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 
 async function projectKey(projectId: string): Promise<CryptoKey> {
   return useProjectKeyStore.getState().unlock(projectId);
@@ -53,36 +54,51 @@ export interface CreateTaskInput {
   assigneeIds?: string[] | undefined;
 }
 
+export class TaskServiceError extends Error {
+  constructor(public readonly code: "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED", message: string) {
+    super(message);
+    this.name = "TaskServiceError";
+  }
+}
+
+function taskRpcError(error: { code?: string; message?: string } | null): TaskServiceError {
+  const code = error?.code;
+  const message = error?.message ?? "";
+  if (code === "RT401" || code === "RT403" || code === "42501" || message.includes("TASK_PERMISSION_DENIED")) {
+    return new TaskServiceError("TASK_PERMISSION_DENIED", "이 프로젝트에서 작업을 생성할 권한이 없습니다.");
+  }
+  if (code === "RT422" || message.includes("INVALID_ASSIGNEE")) {
+    return new TaskServiceError("INVALID_ASSIGNEE", "담당자는 현재 프로젝트 멤버여야 합니다.");
+  }
+  if (code === "RT400" || code === "22000" || message.includes("TASK_INPUT_INVALID")) {
+    return new TaskServiceError("TASK_INPUT_INVALID", "작업 입력값을 확인해 주세요.");
+  }
+  return new TaskServiceError("TASK_CREATE_FAILED", "작업을 생성할 수 없습니다. (TASK_CREATE_FAILED)");
+}
+
 export async function createTask(input: CreateTaskInput): Promise<Task> {
   const user = useAuthStore.getState().user;
   if (!user) throw new Error("로그인이 필요합니다.");
-  const key = await projectKey(input.projectId);
+  let key: CryptoKey;
+  try { key = await projectKey(input.projectId); }
+  catch { throw new TaskServiceError("PROJECT_KEY_LOCKED", "프로젝트 키가 잠겨 있습니다. 다시 잠금을 해제해 주세요."); }
   const id = crypto.randomUUID();
   const descriptionEncrypted = input.description
     ? await encryptContent(input.description, key, { projectId: input.projectId, entityType: "task-description", entityId: id })
     : null;
-  const { data, error } = await supabase.from("tasks").insert({
-    id,
-    project_id: input.projectId,
-    title: input.title.trim(),
-    description_encrypted: descriptionEncrypted,
-    status: input.status ?? "todo",
-    priority: input.priority ?? "medium",
-    progress: input.progress ?? 0,
-    start_date: input.startDate || null,
-    due_date: input.dueDate || null,
-    created_by: user.id
-  }).select().single();
-  if (error || !data) throw new Error("작업을 생성할 수 없습니다.");
-  if (input.assigneeIds?.length) {
-    const { error: assigneeError } = await supabase.from("task_assignees").insert(
-      [...new Set(input.assigneeIds)].map((userId) => ({ task_id: id, user_id: userId, assigned_by: user.id }))
-    );
-    if (assigneeError) {
-      await supabase.from("tasks").delete().eq("id", id);
-      throw new Error("담당자를 지정할 수 없습니다.");
-    }
-  }
+  const { data, error } = await supabase.rpc("create_task_atomic", {
+    p_task_id: id,
+    p_project_id: input.projectId,
+    p_title: input.title.trim(),
+    p_description_encrypted: descriptionEncrypted,
+    p_status: input.status ?? "todo",
+    p_priority: input.priority ?? "medium",
+    p_progress: input.progress ?? 0,
+    p_start_date: input.startDate || null,
+    p_due_date: input.dueDate || null,
+    p_assignee_ids: [...new Set(input.assigneeIds ?? [])]
+  });
+  if (error || !data) throw taskRpcError(error);
   return { ...(data as Task), description: input.description ?? "" };
 }
 
@@ -113,6 +129,10 @@ export async function addAssignee(taskId: string, userId: string): Promise<void>
 export async function removeAssignee(taskId: string, userId: string): Promise<void> {
   const { error } = await supabase.from("task_assignees").delete().eq("task_id", taskId).eq("user_id", userId);
   if (error) throw new Error("담당자를 제거할 수 없습니다.");
+}
+
+export async function deleteTask(taskId: string): Promise<{ projectId: string }> {
+  return invokeAuthenticatedFunction("delete-task", { body: { taskId }, fallbackMessage: "작업을 삭제할 수 없습니다." });
 }
 
 export async function addChecklistItem(task: Task, content: string, position: number): Promise<void> {

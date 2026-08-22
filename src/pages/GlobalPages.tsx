@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckSquare, Github, KeyRound, Save, Settings as SettingsIcon } from "lucide-react";
+import { Bell, CheckSquare, Github, Monitor, Save, Settings as SettingsIcon } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Avatar, Badge, Button, EmptyState, Input, PageHeader, Spinner } from "../components/ui";
@@ -8,8 +8,8 @@ import { listProjects } from "../services/projects";
 import { listTasks } from "../services/tasks";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../stores/authStore";
-import { useThemeStore, type ThemePreference } from "../stores/themeStore";
 import type { Project, Task } from "../types/domain";
+import { ThemeCycleButton } from "../components/ThemeCycleButton";
 
 async function accessibleTasks(): Promise<Array<Task & { project?: Project }>> {
   const projects = await listProjects();
@@ -43,11 +43,9 @@ export function NotificationsPage() {
 
 export function SettingsPage() {
   const { profile, refreshProfile } = useAuthStore();
-  const theme = useThemeStore((state) => state.preference);
-  const setTheme = useThemeStore((state) => state.setPreference);
   const [github, setGithub] = useState(profile?.github_username ?? "");
   const [name, setName] = useState(profile?.name ?? "");
   const [saved, setSaved] = useState(false);
   const submit = async (event: FormEvent) => { event.preventDefault(); const { error } = await supabase.from("profiles").update({ name: name.trim(), github_username: github.trim() || null }).eq("id", profile!.id); if (error) throw new Error("프로필을 저장할 수 없습니다."); await refreshProfile(); setSaved(true); setTimeout(() => setSaved(false), 2500); };
-  return <div className="page-wrap max-w-4xl"><PageHeader eyebrow="Account" title="설정" /><div className="grid gap-5 md:grid-cols-2"><form onSubmit={submit} className="panel p-5"><div className="flex items-center gap-2"><SettingsIcon size={18} className="text-brand" /><h2 className="font-extrabold text-ink">프로필</h2></div><label className="label mt-5" htmlFor="profile-name">이름</label><Input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} /><label className="label mt-4" htmlFor="profile-student">학번</label><Input id="profile-student" value={profile?.student_id ?? ""} disabled /><label className="label mt-4" htmlFor="profile-github">GitHub Username</label><div className="relative"><Github className="absolute left-3 top-3 text-muted" size={16} /><Input id="profile-github" value={github} onChange={(event) => setGithub(event.target.value)} className="pl-9" placeholder="Github name" pattern="[A-Za-z0-9-]{1,39}" /></div><p className="mt-1.5 text-xs text-muted">GitHub 프로필 URL의 사용자명(@username)을 입력하세요. 예: github.com/username → username</p><Button type="submit" className="mt-5"><Save size={15} /> {saved ? "저장됨" : "저장"}</Button></form><section className="panel p-5"><div className="flex items-center gap-2"><KeyRound size={18} className="text-brand" /><h2 className="font-extrabold text-ink">보안 및 암호화</h2></div><div className="mt-5 space-y-3 text-sm"><div className="subtle-panel flex items-center justify-between gap-3 p-3"><label className="text-muted" htmlFor="settings-theme">테마</label><select id="settings-theme" className="field w-auto min-w-28 py-1.5" value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)}><option value="system">시스템</option><option value="light">라이트</option><option value="dark">다크</option></select></div><div className="subtle-panel flex items-center justify-between p-3"><span className="text-muted">자동 키 잠금</span><Badge tone="blue">15분</Badge></div><div className="subtle-panel flex items-center justify-between p-3"><span className="text-muted">사용자 keyring</span><Badge tone="green">활성</Badge></div><div className="subtle-panel flex items-center justify-between p-3"><span className="text-muted">Project data</span><Badge tone="blue">AES-256-GCM</Badge></div><div className="subtle-panel flex items-center justify-between p-3"><span className="text-muted">Key wrapping</span><Badge tone="purple">P-256 ECDH</Badge></div></div><p className="mt-4 text-xs leading-5 text-muted">프로젝트 암호화 키는 활성 세션에서만 사용할 수 있으며, 15분 동안 활동이 없으면 자동으로 잠깁니다.</p></section></div></div>;
+  return <div className="page-wrap max-w-4xl"><PageHeader eyebrow="Account" title="설정" /><div className="grid gap-5 md:grid-cols-2"><form onSubmit={submit} className="panel p-5"><div className="flex items-center gap-2"><SettingsIcon size={18} className="text-brand" /><h2 className="font-extrabold text-ink">프로필</h2></div><label className="label mt-5" htmlFor="profile-name">이름</label><Input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} /><label className="label mt-4" htmlFor="profile-student">학번</label><Input id="profile-student" value={profile?.student_id ?? ""} disabled /><label className="label mt-4" htmlFor="profile-github">GitHub Username</label><div className="relative"><Github className="absolute left-3 top-3 text-muted" size={16} /><Input id="profile-github" value={github} onChange={(event) => setGithub(event.target.value)} className="pl-9" placeholder="Github name" pattern="[A-Za-z0-9-]{1,39}" /></div><p className="mt-1.5 text-xs text-muted">GitHub 프로필 URL의 사용자명(@username)을 입력하세요. 예: github.com/username → username</p><Button type="submit" className="mt-5"><Save size={15} /> {saved ? "저장됨" : "저장"}</Button></form><section className="panel p-5"><div className="flex items-center gap-2"><Monitor size={18} className="text-brand" /><h2 className="font-extrabold text-ink">화면</h2></div><div className="mt-5 flex items-center justify-between rounded-xl border border-line p-3"><span className="text-sm text-muted">테마</span><ThemeCycleButton /></div></section></div></div>;
 }

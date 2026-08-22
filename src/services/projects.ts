@@ -116,11 +116,25 @@ export async function updateProject(projectId: string, updates: Partial<Pick<Pro
   return data as Project;
 }
 
-export async function deleteGitHubRepository(projectId: string, confirmation: string): Promise<void> {
-  await invokeAuthenticatedFunction("delete-github-repository", {
-    body: { projectId, confirmation },
-    fallbackMessage: "GitHub Repository를 삭제할 수 없습니다."
-  });
+export async function deleteProject(projectId: string, confirmation: string): Promise<void> {
+  try {
+    await invokeAuthenticatedFunction("delete-github-repository", {
+      body: { projectId, confirmation },
+      fallbackMessage: "프로젝트를 삭제할 수 없습니다."
+    });
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "PROJECT_DELETE_FAILED";
+    const messages: Record<string, string> = {
+      PROJECT_OWNER_REQUIRED: "Project Owner만 프로젝트를 삭제할 수 있습니다.",
+      GITHUB_AUTH_FAILED: "GitHub 인증 설정을 확인해 주세요.",
+      GITHUB_PERMISSION_DENIED: "GitHub Token에 Repository 삭제 권한이 없습니다.",
+      GITHUB_NETWORK_FAILED: "GitHub에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+      GITHUB_TIMEOUT: "GitHub 응답 시간이 초과되었습니다.",
+      STORAGE_CLEANUP_FAILED: "프로젝트 파일을 정리하지 못했습니다. 다시 시도해 주세요.",
+      PROJECT_DELETE_FAILED: "프로젝트 데이터를 삭제하지 못했습니다. 다시 시도해 주세요."
+    };
+    throw new Error(`${messages[code] ?? "프로젝트를 삭제할 수 없습니다."} (${code})`);
+  }
 }
 
 export async function retryGitHubMemberSync(projectId: string, userId: string, action: "add_collaborator" | "remove_collaborator"): Promise<void> {

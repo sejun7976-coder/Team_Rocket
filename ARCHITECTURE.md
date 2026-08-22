@@ -66,6 +66,16 @@ GitHub 성공 후 DB finalize가 실패하면 `github-retry`가 owner/repository
 
 bucket은 private `project-files`이며 object path는 `{projectId}/{fileId}/encrypted.bin`이다. browser가 4 MiB chunk 단위 AES-GCM envelope container를 만든 후 upload한다. Storage RLS는 path 첫 segment를 UUID로 해석하고 membership을 검사한다. original filename과 checksum은 encrypted file metadata에 저장한다.
 
+Task 첨부도 별도 버킷을 만들지 않고 `files.task_id`로 같은 암호화 파일 시스템에 연결한다. Task 생성은 browser가 설명 ciphertext를 만든 후 `create_task_atomic` RPC가 Task와 중복 제거된 담당자를 한 transaction에 저장한다. Task가 성공한 뒤 각 첨부를 암호화·업로드하므로 일부 첨부 실패가 Task 생성 자체를 되돌리지 않는다.
+
+## Rocket AI
+
+Browser는 현재 사용자가 복호화해 이미 볼 수 있는 업무 정보 중 사용자가 명시적으로 요청한 최소 context만 `ai-assistant`에 보낸다. Project DEK, keyring, PIN/password, JWT, GitHub token과 attachment bytes는 prompt에 포함하지 않는다. Edge Function은 membership을 다시 확인하고 OpenAI Responses API에 structured output을 요청한다. AI가 반환한 Task proposal은 화면에서 확인한 뒤에만 기존 `createTask` service를 호출한다.
+
+`ai_provider_settings`와 `ai_usage_logs`는 anon/authenticated Data API 권한이 없고 service role Edge Function만 접근한다. system admin이 입력한 provider key는 `AI_CONFIG_MASTER_KEY`에서 가져온 server-only AES-GCM key로 암호화해 저장하며 GET 응답은 configured 여부만 반환한다. Usage log는 prompt/content 없이 user/project/feature/model/token/latency metadata만 기록한다.
+
+프로젝트 영구 삭제는 Owner 확인 → GitHub marker 검증 → Repository 삭제(404는 완료로 간주) → private Storage object 삭제 → Project row 삭제 순서다. 마지막 Project 삭제가 child FK cascade를 실행하며 AI usage의 project reference는 비용 감사 보존을 위해 `NULL`로 바뀐다.
+
 ## 프런트엔드 경계
 
 - `src/crypto`: keyring, project key wrapping, envelopes, file chunking. Supabase/React import 금지.

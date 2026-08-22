@@ -20,6 +20,8 @@ export interface GitHubRepository {
   homepage: string | null;
 }
 
+export interface GitHubCommitSummary { sha: string; message: string; authoredAt: string | null }
+
 export interface CreateGitHubRepositoryInput {
   projectId: string;
   name: string;
@@ -228,5 +230,21 @@ export class GitHubClient {
       { method: "DELETE" }
     );
     if (!response.ok && response.status !== 404) throw responseError(response);
+  }
+
+  async listRecentCommits(repositoryName: string): Promise<GitHubCommitSummary[]> {
+    const response = await this.request(`/repos/${encodeURIComponent(this.configuration.owner)}/${encodeURIComponent(repositoryName)}/commits?per_page=10`);
+    if (response.status === 404 || response.status === 409) return [];
+    if (!response.ok) throw responseError(response);
+    const value = await this.json(response);
+    if (!Array.isArray(value)) throw new GitHubClientError(502, "GITHUB_INVALID_RESPONSE", "GitHub 응답이 올바르지 않습니다.");
+    return value.flatMap((item): GitHubCommitSummary[] => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const record = item as Record<string, unknown>;
+      const commit = record.commit && typeof record.commit === "object" && !Array.isArray(record.commit) ? record.commit as Record<string, unknown> : null;
+      const author = commit?.author && typeof commit.author === "object" && !Array.isArray(commit.author) ? commit.author as Record<string, unknown> : null;
+      if (typeof record.sha !== "string" || typeof commit?.message !== "string") return [];
+      return [{ sha: record.sha.slice(0, 12), message: commit.message.slice(0, 500), authoredAt: typeof author?.date === "string" ? author.date : null }];
+    });
   }
 }

@@ -119,3 +119,7 @@ export async function removeCollaborator(repositoryName: string, username: strin
 export async function deleteRepository(repositoryName: string): Promise<void> {
   await translate((client) => client.deleteRepository(repositoryName));
 }
+
+export async function listRecentCommits(repositoryName: string): Promise<Array<{ sha: string; message: string; authoredAt: string | null }>> {
+  return await translate((client) => client.listRecentCommits(repositoryName));
+}
