@@ -7,6 +7,7 @@ import recoveryBootstrapSql from "../../supabase/migrations/202608220005_recover
 import accessLogSql from "../../supabase/migrations/202608220007_admin_project_access_logs.sql?raw";
 import taskAndAISql from "../../supabase/migrations/202608220008_task_atomic_and_ai.sql?raw";
 import multiProviderSql from "../../supabase/migrations/202608220009_ai_registry_user_deletion_task_rpc.sql?raw";
+import singleGatewaySql from "../../supabase/migrations/202608220012_single_ai_gateway.sql?raw";
 
 const authenticatedPrivileges = {
   profiles: ["select", "update"],
@@ -101,5 +102,15 @@ describe("Supabase Data API authorization contract", () => {
     }
     expect(sql).toContain("revoke all on table public.ai_provider_settings, public.ai_model_settings from public, anon, authenticated;");
     expect(sql).toContain("grant all on table public.ai_provider_settings, public.ai_model_settings to service_role;");
+  });
+
+  it("keeps the single AI Gateway and model registry outside anon/authenticated Data API access", () => {
+    const sql = singleGatewaySql.toLowerCase();
+    expect(sql).toContain("alter table public.ai_gateway_settings enable row level security;");
+    expect(sql).toContain("alter table public.ai_gateway_settings force row level security;");
+    expect(sql).toContain("revoke all on table public.ai_gateway_settings from public, anon, authenticated;");
+    expect(sql).toContain("grant all on table public.ai_gateway_settings to service_role;");
+    expect(sql).toContain("revoke all on table public.ai_model_settings from public, anon, authenticated;");
+    expect(sql).not.toMatch(/grant\s+[\s\S]*?ai_gateway_settings[\s\S]*?\s+to\s+(anon|authenticated)\s*;/iu);
   });
 });

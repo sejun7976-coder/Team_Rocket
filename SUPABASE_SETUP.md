@@ -23,6 +23,8 @@ Migration은 반드시 순서대로 적용한다.
 8. `202608220008_task_atomic_and_ai.sql`: 암호화 작업 생성 RPC와 초기 AI 설정
 9. `202608220009_ai_registry_user_deletion_task_rpc.sql`: multi-provider AI registry, 사용자 완전 삭제 지원, task RPC 재게시
 10. `202608220010_fix_domain_activity_triggers.sql`: table별 활동 trigger 분리, `tasks` row에 없는 `user_id` 참조 제거
+11. `202608220011_fix_task_deletion.sql`: Task cascade 삭제 시 assignee DELETE trigger의 부모 재조회 실패 방지
+12. `202608220012_single_ai_gateway.sql`: service-role 전용 단일 AI Gateway와 32개 모델 registry, 전역 default 제약
 
 SQL Editor에서 table을 수동 생성하지 않는다.
 
@@ -222,7 +224,7 @@ npx supabase test db
 - 비멤버가 이미 알고 있는 UUID로 profiles, projects, members, keys, tasks, assignees, checklist, comments, activities, files, notifications, GitHub jobs를 조회하거나 변경하려는 공격 차단
 - stale JWT를 가진 비활성 사용자의 접근 차단
 
-`supabase/tests/task_trigger_regression.sql`은 실제 `create_task_atomic` 호출로 0/1/2명 담당자, NULL/유효 마감일, 중복·비멤버 담당자, activity/notification trigger 동작과 원자적 rollback을 검증한다.
+`supabase/tests/task_trigger_regression.sql`은 실제 `create_task_atomic` 호출로 0/1/2명 담당자, NULL/유효 마감일, 중복·비멤버 담당자, activity/notification trigger 동작과 원자적 rollback을 검증한다. 또한 담당자·댓글·파일 metadata·알림이 있는 Task의 cascade 삭제와 감사 activity 보존을 회귀 테스트한다.
 
 ## 8. Frontend 환경 변수
 
@@ -237,7 +239,9 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<PUBLISHABLE_KEY>
 
 ## 9. Rocket AI 운영 설정
 
-Migration 009를 적용하면 기존 OpenAI ciphertext/IV는 OpenAI provider row로 보존되고 OpenAI/Anthropic/Google provider 및 별도 model registry가 생성된다. 이미 등록한 `AI_CONFIG_MASTER_KEY`는 재생성하거나 rotate하지 않는다. 신규 환경에서만 아래 PowerShell 명령으로 값을 화면에 출력하지 않고 한 번 등록한다.
+Migration 012는 기존 provider별 table과 암호문을 삭제하지 않고 deprecated 상태로 보존하며, 실제 runtime을 `ai_gateway_settings` singleton과 `ai_model_settings` registry로 전환한다. 모든 활성 모델은 동일한 Gateway Base URL/API Key를 사용하고, `family`는 화면 그룹에만 사용한다. 기본 catalog는 32개이며 최초 default는 `gpt-5.6-sol`이다.
+
+이미 등록한 `AI_CONFIG_MASTER_KEY`는 **재생성하거나 rotate하지 않는다.** 기존 환경에서는 아래 Secret 생성 명령도 다시 실행하지 않는다. 신규 환경에서 Secret이 전혀 없을 때만 아래 PowerShell 명령으로 값을 화면에 출력하지 않고 한 번 등록한다.
 
 ```powershell
 $rocketAiBytes = [byte[]]::new(32)
@@ -253,9 +257,9 @@ Remove-Variable rocketAiMasterKey, rocketAiBytes
 npx supabase functions deploy ai-assistant --project-ref joljmlyzhlwrlnbunusb
 npx supabase functions deploy ai-models --project-ref joljmlyzhlwrlnbunusb
 npx supabase functions deploy admin-ai-settings --project-ref joljmlyzhlwrlnbunusb
-npx supabase functions deploy admin-delete-user --project-ref joljmlyzhlwrlnbunusb
-npx supabase functions deploy github-repository-status --project-ref joljmlyzhlwrlnbunusb
 npx supabase functions deploy delete-task --project-ref joljmlyzhlwrlnbunusb
 ```
 
-system admin으로 `/#/admin/ai`를 열어 provider별 API Key와 실제 API model ID/표시 이름을 등록한다. model ID는 코드에 고정되어 있지 않다. 저장 후 Browser에는 Key가 다시 반환되지 않는다. 각 Key는 서로 다른 AES-GCM IV로 암호화되어 `ai_provider_settings`에 저장되며 이 table과 `ai_model_settings`는 anon/authenticated Data API 권한이 없다. 일반 사용자는 `ai-models`의 safe response로 활성 모델 ID(UUID), provider, 표시 이름만 받는다.
+system admin으로 `/#/admin/ai`를 열어 HTTPS Gateway Base URL과 Gateway API Key 하나를 저장한다. Key는 기존 `AI_CONFIG_MASTER_KEY`로 AES-GCM 암호화되어 저장되며, 저장 후 Browser에는 설정 여부만 반환되고 원문은 다시 표시되지 않는다. 운영 URL은 localhost, link-local, private IP를 거부하며 `AI_GATEWAY_ALLOWED_HOSTS` Secret을 쉼표 구분 hostname 목록으로 설정하면 exact host allowlist도 적용할 수 있다.
+
+같은 화면에서 사용할 모델만 활성화하고 정확히 하나를 default로 지정한다. default 모델은 다른 default를 지정하기 전에는 비활성화/삭제할 수 없다. builtin 모델은 삭제하지 않고 비활성화하며, 관리자가 추가한 custom 모델만 삭제할 수 있다. `ai_gateway_settings`와 `ai_model_settings`에는 anon/authenticated Data API 권한이 없고, 일반 사용자는 `ai-models`의 safe response로 활성 model setting UUID, model ID, family, 표시 이름만 받는다.

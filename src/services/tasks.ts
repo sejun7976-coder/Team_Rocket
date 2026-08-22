@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../stores/authStore";
 import { useProjectKeyStore } from "../stores/projectKeyStore";
 import type { ChecklistItem, Comment, Task, TaskPriority, TaskStatus } from "../types/domain";
-import { invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
+import { AuthenticatedFunctionError, invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 
 async function projectKey(projectId: string): Promise<CryptoKey> {
   return useProjectKeyStore.getState().unlock(projectId);
@@ -54,7 +54,7 @@ export interface CreateTaskInput {
   assigneeIds?: string[] | undefined;
 }
 
-export type TaskServiceErrorCode = "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_RPC_NOT_AVAILABLE" | "TASK_SCHEMA_ERROR" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED";
+export type TaskServiceErrorCode = "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_RPC_NOT_AVAILABLE" | "TASK_SCHEMA_ERROR" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED" | "TASK_NOT_FOUND" | "TASK_DELETE_FORBIDDEN" | "TASK_STORAGE_CLEANUP_FAILED" | "TASK_DELETE_CONFLICT" | "TASK_DELETE_DB_FAILED";
 export class TaskServiceError extends Error {
   constructor(public readonly code: TaskServiceErrorCode, message: string, public readonly databaseCode?: string) {
     super(message);
@@ -136,7 +136,21 @@ export async function removeAssignee(taskId: string, userId: string): Promise<vo
 }
 
 export async function deleteTask(taskId: string): Promise<{ projectId: string }> {
-  return invokeAuthenticatedFunction("delete-task", { body: { taskId }, fallbackMessage: "작업을 삭제할 수 없습니다." });
+  try {
+    return await invokeAuthenticatedFunction("delete-task", { body: { taskId }, fallbackMessage: "작업을 삭제할 수 없습니다." });
+  } catch (error) {
+    if (!(error instanceof AuthenticatedFunctionError)) throw error;
+    const messages: Record<string, string> = {
+      TASK_NOT_FOUND: "작업을 찾을 수 없습니다.",
+      TASK_DELETE_FORBIDDEN: "작업을 삭제할 권한이 없습니다.",
+      TASK_STORAGE_CLEANUP_FAILED: "첨부 파일을 정리하지 못해 작업을 보존했습니다. 다시 시도해 주세요.",
+      TASK_DELETE_CONFLICT: "연결된 작업 데이터 정리가 충돌했습니다. 다시 시도해 주세요.",
+      TASK_DELETE_DB_FAILED: "작업 데이터를 삭제할 수 없습니다.",
+      TASK_SCHEMA_ERROR: "작업 데이터 구조가 올바르지 않습니다."
+    };
+    const code = error.code in messages ? error.code as TaskServiceErrorCode : "TASK_DELETE_DB_FAILED";
+    throw new TaskServiceError(code, `${messages[code] ?? messages.TASK_DELETE_DB_FAILED} (${code})`);
+  }
 }
 
 export async function addChecklistItem(task: Task, content: string, position: number): Promise<void> {

@@ -14,8 +14,7 @@ import deleteFunction from "../../supabase/functions/delete-github-repository/in
 import retryFunction from "../../supabase/functions/github-retry/index.ts?raw";
 import aiFunction from "../../supabase/functions/ai-assistant/index.ts?raw";
 import adminAIFunction from "../../supabase/functions/admin-ai-settings/index.ts?raw";
-import provider from "../../supabase/functions/_shared/ai/provider.ts?raw";
-import openai from "../../supabase/functions/_shared/ai/openai.ts?raw";
+import gateway from "../../supabase/functions/_shared/ai/gateway.ts?raw";
 import configuration from "../../supabase/functions/_shared/ai/configuration.ts?raw";
 import { validateProjectFile } from "./filePolicy";
 
@@ -62,7 +61,7 @@ describe("integrated project security features", () => {
     expect(projectService).toContain("STORAGE_CLEANUP_FAILED");
   });
 
-  it("keeps AI provider credentials server-only and encrypted at rest", () => {
+  it("keeps the AI Gateway credential server-only and encrypted at rest", () => {
     expect(migration).toContain("revoke all on table public.ai_provider_settings, public.ai_usage_logs from public, anon, authenticated");
     expect(configuration).toContain('Deno.env.get("AI_CONFIG_MASTER_KEY")');
     expect(configuration).toContain('"AES-GCM"');
@@ -76,12 +75,11 @@ describe("integrated project security features", () => {
     expect(aiFunction).toContain("requireReadyUser(request)");
     expect(aiFunction).toContain('from("project_members")');
     expect(aiFunction).toContain('from("ai_usage_logs")');
-    expect(provider).toContain("callAIProvider");
-    expect(openai).toContain('store: false');
-    expect(openai).toContain('type: "json_schema"');
+    expect(gateway).toContain("callAIGateway");
+    expect(gateway).toContain('response_format: { type: "json_object" }');
     expect(aiPanel).toContain("제안은 확인 후에만 적용됩니다.");
     expect(aiPanel.indexOf("const ask =")).toBeLessThan(aiPanel.indexOf("const apply ="));
-    expect(aiPanel).toContain("Task 생성 확인");
+    expect(aiPanel).toContain("작업 생성");
   });
 
   it("removes technical crypto UI without changing key lock implementation", () => {

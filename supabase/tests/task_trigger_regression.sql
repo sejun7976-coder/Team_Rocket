@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(17);
+select plan(26);
 
 insert into auth.users(id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
 values
@@ -61,5 +61,23 @@ select throws_ok(
 select is((select count(*)::integer from public.tasks where id = 'a4000000-0000-4000-8000-000000000005'), 0, 'invalid assignee failure leaves no partial task');
 
 reset role;
+select lives_ok(
+  $$delete from public.tasks where id = 'a4000000-0000-4000-8000-000000000003'$$,
+  'deleting a task with multiple assignees survives the assignee cascade trigger'
+);
+select is((select count(*)::integer from public.task_assignees where task_id = 'a4000000-0000-4000-8000-000000000003'), 0, 'task delete cascades every assignee row');
+select is((select count(*)::integer from public.notifications where task_id = 'a4000000-0000-4000-8000-000000000003'), 0, 'task delete cascades task notifications without recreating them');
+select lives_ok(
+  $$delete from public.tasks where id = 'a4000000-0000-4000-8000-000000000002'$$,
+  'deleting a task with comment, file metadata and activity succeeds'
+);
+select is((select count(*)::integer from public.comments where task_id = 'a4000000-0000-4000-8000-000000000002'), 0, 'task delete cascades comments');
+select is((select count(*)::integer from public.files where task_id = 'a4000000-0000-4000-8000-000000000002'), 0, 'task delete cascades file metadata after Edge storage cleanup');
+select cmp_ok((select count(*)::integer from public.activities where subject_id = 'a4000000-0000-4000-8000-000000000002'), '>', 0, 'audit activities survive task deletion as snapshots');
+select lives_ok(
+  $$delete from public.tasks where id = 'a4000000-0000-4000-8000-000000000001'$$,
+  'deleting a task without assignees or children succeeds'
+);
+select is((select count(*)::integer from public.tasks where id in ('a4000000-0000-4000-8000-000000000001','a4000000-0000-4000-8000-000000000002','a4000000-0000-4000-8000-000000000003')), 0, 'all deletion fixtures are removed without database orphans');
 select * from finish();
 rollback;
