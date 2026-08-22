@@ -10,6 +10,8 @@
 - 팀원 및 GitHub collaborator 동기화
 - Kanban, 복수 담당자, checklist, 댓글, 일정, 활동 기록, 알림
 - Browser AES-256-GCM 암호화 파일 공유와 프로젝트별 DEK
+- OpenAI/Anthropic/Google provider와 관리자 model registry 기반 Rocket AI floating chat
+- GitHub Repository 실상태 reconciliation과 감사 기록을 보존하는 관리자 계정 삭제
 - HashRouter 기반 GitHub Pages 배포, light/dark 반응형 UI
 
 ## 로컬 실행

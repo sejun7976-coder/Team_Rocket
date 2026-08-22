@@ -15,6 +15,7 @@ import retryFunction from "../../supabase/functions/github-retry/index.ts?raw";
 import aiFunction from "../../supabase/functions/ai-assistant/index.ts?raw";
 import adminAIFunction from "../../supabase/functions/admin-ai-settings/index.ts?raw";
 import provider from "../../supabase/functions/_shared/ai/provider.ts?raw";
+import openai from "../../supabase/functions/_shared/ai/openai.ts?raw";
 import configuration from "../../supabase/functions/_shared/ai/configuration.ts?raw";
 import { validateProjectFile } from "./filePolicy";
 
@@ -75,11 +76,12 @@ describe("integrated project security features", () => {
     expect(aiFunction).toContain("requireReadyUser(request)");
     expect(aiFunction).toContain('from("project_members")');
     expect(aiFunction).toContain('from("ai_usage_logs")');
-    expect(provider).toContain('store: false');
-    expect(provider).toContain('type: "json_schema"');
-    expect(aiPanel).toContain("AI 제안은 확인 전까지 프로젝트를 변경하지 않습니다.");
+    expect(provider).toContain("callAIProvider");
+    expect(openai).toContain('store: false');
+    expect(openai).toContain('type: "json_schema"');
+    expect(aiPanel).toContain("제안은 확인 후에만 적용됩니다.");
     expect(aiPanel.indexOf("const ask =")).toBeLessThan(aiPanel.indexOf("const apply ="));
-    expect(aiPanel).toContain("이 내용으로 Task 생성");
+    expect(aiPanel).toContain("Task 생성 확인");
   });
 
   it("removes technical crypto UI without changing key lock implementation", () => {

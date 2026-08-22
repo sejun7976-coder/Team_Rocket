@@ -151,3 +151,9 @@ export async function retryGitHubRepositoryCreation(projectId: string): Promise<
   });
   return data.project;
 }
+
+export type GitHubRepositoryState = "connected" | "missing" | "recoverable" | "conflict";
+export interface GitHubRepositoryStatus { status: GitHubRepositoryState; reconciled: boolean; repositoryUrl: string | null }
+export async function getGitHubRepositoryStatus(projectId: string): Promise<GitHubRepositoryStatus> {
+  return invokeAuthenticatedFunction("github-repository-status", { body: { projectId }, fallbackMessage: "GitHub Repository 상태를 확인할 수 없습니다." });
+}

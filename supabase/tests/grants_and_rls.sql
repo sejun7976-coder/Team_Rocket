@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(68);
+select plan(72);
 
 -- Exact browser privilege matrix. Extra privileges fail this test just like missing ones.
 with expected(table_name, can_select, can_insert, can_update, can_delete) as (values
@@ -21,6 +21,7 @@ with expected(table_name, can_select, can_insert, can_update, can_delete) as (va
   ('system_admin_bootstrap_state', false, false, false, false),
   ('user_access_logs', false, false, false, false),
   ('ai_provider_settings', false, false, false, false),
+  ('ai_model_settings', false, false, false, false),
   ('ai_usage_logs', false, false, false, false)
 )
 select ok(
@@ -40,7 +41,7 @@ with business_tables(table_name) as (values
   ('profiles'), ('projects'), ('project_members'), ('project_keys'), ('tasks'),
   ('task_assignees'), ('task_checklist_items'), ('comments'), ('activities'),
   ('files'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
-  ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_usage_logs')
+  ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_model_settings'), ('ai_usage_logs')
 )
 select ok(
   not has_table_privilege('anon', format('public.%I', table_name), 'SELECT')
@@ -59,7 +60,7 @@ with business_tables(table_name) as (values
   ('profiles'), ('projects'), ('project_members'), ('project_keys'), ('tasks'),
   ('task_assignees'), ('task_checklist_items'), ('comments'), ('activities'),
   ('files'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
-  ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_usage_logs')
+  ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_model_settings'), ('ai_usage_logs')
 )
 select ok(
   coalesce((
@@ -90,6 +91,7 @@ with expected(table_name, can_select, can_insert, can_update, can_delete) as (va
   ('system_admin_bootstrap_state', false, false, false, false),
   ('user_access_logs', false, false, false, false),
   ('ai_provider_settings', false, false, false, false),
+  ('ai_model_settings', false, false, false, false),
   ('ai_usage_logs', false, false, false, false)
 )
 select ok(

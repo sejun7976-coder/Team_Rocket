@@ -144,16 +144,19 @@ npx supabase functions deploy admin-create-user
 npx supabase functions deploy admin-list-users
 npx supabase functions deploy admin-reset-password
 npx supabase functions deploy admin-set-user-status
+npx supabase functions deploy admin-delete-user
 npx supabase functions deploy complete-first-login
 npx supabase functions deploy admin-list-projects
 npx supabase functions deploy create-project
 npx supabase functions deploy sync-project-member
 npx supabase functions deploy remove-project-member
 npx supabase functions deploy github-retry
+npx supabase functions deploy github-repository-status
 npx supabase functions deploy delete-github-repository
 npx supabase functions deploy record-access-event
 npx supabase functions deploy admin-list-access-logs
 npx supabase functions deploy ai-assistant
+npx supabase functions deploy ai-models
 npx supabase functions deploy admin-ai-settings
 npx supabase functions deploy delete-task
 ```
@@ -229,7 +232,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<PUBLISHABLE_KEY>
 
 ## 9. Rocket AI 운영 설정
 
-Migration을 적용한 뒤 random 256-bit `AI_CONFIG_MASTER_KEY`를 한 번 등록한다. 아래 PowerShell 명령은 값을 화면에 출력하지 않고 생성·등록한 뒤 변수에서 제거한다.
+Migration 009를 적용하면 기존 OpenAI ciphertext/IV는 OpenAI provider row로 보존되고 OpenAI/Anthropic/Google provider 및 별도 model registry가 생성된다. 이미 등록한 `AI_CONFIG_MASTER_KEY`는 재생성하거나 rotate하지 않는다. 신규 환경에서만 아래 PowerShell 명령으로 값을 화면에 출력하지 않고 한 번 등록한다.
 
 ```powershell
 $rocketAiBytes = [byte[]]::new(32)
@@ -243,8 +246,11 @@ Remove-Variable rocketAiMasterKey, rocketAiBytes
 
 ```bash
 npx supabase functions deploy ai-assistant --project-ref joljmlyzhlwrlnbunusb
+npx supabase functions deploy ai-models --project-ref joljmlyzhlwrlnbunusb
 npx supabase functions deploy admin-ai-settings --project-ref joljmlyzhlwrlnbunusb
+npx supabase functions deploy admin-delete-user --project-ref joljmlyzhlwrlnbunusb
+npx supabase functions deploy github-repository-status --project-ref joljmlyzhlwrlnbunusb
 npx supabase functions deploy delete-task --project-ref joljmlyzhlwrlnbunusb
 ```
 
-system admin으로 `/#/admin/ai`를 열어 OpenAI model과 API Key를 입력한다. 저장 후 Browser에는 Key가 다시 반환되지 않는다. Key는 `AI_CONFIG_MASTER_KEY`로 AES-GCM 암호화되어 `ai_provider_settings`에 저장되며 이 table은 anon/authenticated Data API 권한이 없다.
+system admin으로 `/#/admin/ai`를 열어 provider별 API Key와 실제 API model ID/표시 이름을 등록한다. model ID는 코드에 고정되어 있지 않다. 저장 후 Browser에는 Key가 다시 반환되지 않는다. 각 Key는 서로 다른 AES-GCM IV로 암호화되어 `ai_provider_settings`에 저장되며 이 table과 `ai_model_settings`는 anon/authenticated Data API 권한이 없다. 일반 사용자는 `ai-models`의 safe response로 활성 모델 ID(UUID), provider, 표시 이름만 받는다.

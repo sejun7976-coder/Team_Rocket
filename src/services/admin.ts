@@ -73,6 +73,10 @@ export async function setAdminUserActive(userId: string, active: boolean): Promi
   await invokeAdmin("admin-set-user-status", { userId, active });
 }
 
+export async function deleteAdminUser(userId: string, confirmation: string): Promise<void> {
+  await invokeAdmin("admin-delete-user", { userId, confirmation });
+}
+
 export async function listAdminProjects(): Promise<AdminProject[]> {
   const data = await invokeAdmin<{ projects: AdminProject[] }>("admin-list-projects");
   return data.projects;

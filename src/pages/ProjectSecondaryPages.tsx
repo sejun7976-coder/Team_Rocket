@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { listActivities } from "../services/activity";
 import { deleteProjectFile, downloadProjectFile, listFiles, uploadProjectFile } from "../services/files";
-import { addProjectMember, deleteProject, listProjectMembers, removeProjectMember, retryGitHubRepositoryCreation, rewrapProjectMemberKey, searchProfiles, updateProject } from "../services/projects";
+import { addProjectMember, deleteProject, getGitHubRepositoryStatus, listProjectMembers, removeProjectMember, retryGitHubRepositoryCreation, rewrapProjectMemberKey, searchProfiles, updateProject } from "../services/projects";
 import { listTasks, updateTask } from "../services/tasks";
 import { useAuthStore } from "../stores/authStore";
 import type { Profile, ProjectFile, ProjectMember, ProjectRole, Task } from "../types/domain";
@@ -95,25 +95,27 @@ export function ProjectGitHubPage() {
   const { project } = useProjectContext();
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
+  const repositoryStatus = useQuery({ queryKey: ["github-repository-status", project.id], queryFn: () => getGitHubRepositoryStatus(project.id), staleTime: 15_000 });
   const retry = useMutation({
     mutationFn: () => retryGitHubRepositoryCreation(project.id),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["project", project.id] }),
-        queryClient.invalidateQueries({ queryKey: ["projects"] })
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["github-repository-status", project.id] })
       ]);
     }
   });
   if (project.created_by !== user?.id) return <Navigate to={`/projects/${project.id}`} replace />;
-  const status = project.github_repository_url ? project.github_sync_status === "error" ? "동기화 오류" : "연결됨" : project.status === "creating" ? "생성 중" : "Repository 없음";
+  const state = repositoryStatus.data?.status ?? (project.github_repository_url ? "connected" : "missing");
+  const status = state === "connected" ? "연결됨" : state === "recoverable" ? "연결 복구됨" : state === "conflict" ? "이름 충돌" : "미연결";
   const refresh = async () => {
-    if (project.github_repository_url) {
-      await queryClient.invalidateQueries({ queryKey: ["project", project.id] });
-    } else {
-      retry.mutate();
-    }
+    const result = await repositoryStatus.refetch();
+    if (result.data?.status === "missing") retry.mutate();
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ["project", project.id] }), queryClient.invalidateQueries({ queryKey: ["projects"] })]);
   };
-  return <div className="page-wrap"><PageHeader eyebrow="Integration" title="GitHub Repository" description="업무 데이터가 아니라 실제 프로젝트 코드와 문서를 위한 저장소입니다." /><div className="panel max-w-3xl p-6"><div className="flex items-start justify-between gap-4"><div className="flex gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-surface"><Github /></div><div><h2 className="font-extrabold text-ink">{project.github_owner ? `${project.github_owner}/${project.github_repository_name}` : project.github_repository_name}</h2><p className="mt-1 text-sm text-muted">{project.visibility === "private" ? "Private Repository" : "Public Repository"}</p></div></div><Badge tone={status === "연결됨" ? "green" : status === "동기화 오류" ? "red" : "amber"}>{status}</Badge></div>{project.github_error_code && <Alert className="mt-5">{project.github_error_code}</Alert>}{retry.error && <Alert className="mt-5">{retry.error.message}</Alert>}<div className="mt-6 flex flex-wrap gap-2">{project.github_repository_url && <a href={project.github_repository_url} target="_blank" rel="noopener noreferrer"><Button><ExternalLink size={16} /> GitHub에서 열기</Button></a>}<Button variant="secondary" disabled={retry.isPending} onClick={() => void refresh()}><RefreshCw className={retry.isPending ? "animate-spin" : ""} size={16} /> {project.github_repository_url ? "상태 새로고침" : "Repository 생성 재시도"}</Button></div></div></div>;
+  const repositoryUrl = repositoryStatus.data?.repositoryUrl ?? project.github_repository_url;
+  return <div className="page-wrap"><PageHeader eyebrow="Integration" title="GitHub Repository" description="프로젝트 활성 상태와 GitHub 연결 상태는 서로 독립적으로 표시됩니다." /><div className="panel max-w-3xl p-6"><div className="flex items-start justify-between gap-4"><div className="flex gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-surface"><Github /></div><div><h2 className="font-extrabold text-ink">{project.github_owner ? `${project.github_owner}/${project.github_repository_name}` : project.github_repository_name}</h2><p className="mt-1 text-sm text-muted">{project.visibility === "private" ? "Private Repository" : "Public Repository"}</p><div className="mt-2 flex gap-2"><Badge tone={project.status === "active" ? "green" : "amber"}>프로젝트 {project.status === "active" ? "활성" : project.status}</Badge><Badge tone={state === "connected" || state === "recoverable" ? "green" : state === "conflict" ? "red" : "amber"}>GitHub {status}</Badge></div></div></div></div>{repositoryStatus.data?.reconciled && <Alert tone="success" className="mt-5">GitHub marker가 일치해 DB 연결 메타데이터를 복구했습니다.</Alert>}{state === "conflict" && <Alert className="mt-5">같은 이름의 Repository가 있지만 이 프로젝트 marker와 일치하지 않습니다.</Alert>}{project.github_error_code && <Alert className="mt-5">{project.github_error_code}</Alert>}{(retry.error || repositoryStatus.error) && <Alert className="mt-5">{retry.error?.message ?? repositoryStatus.error?.message}</Alert>}<div className="mt-6 flex flex-wrap gap-2">{repositoryUrl && <a href={repositoryUrl} target="_blank" rel="noopener noreferrer"><Button><ExternalLink size={16} /> GitHub에서 열기</Button></a>}<Button variant="secondary" disabled={retry.isPending || repositoryStatus.isFetching} onClick={() => void refresh()}><RefreshCw className={retry.isPending || repositoryStatus.isFetching ? "animate-spin" : ""} size={16} /> {state === "missing" ? "Repository 생성 재시도" : "실제 상태 확인"}</Button></div></div></div>;
 }
 
 export function ProjectSettingsPage() {

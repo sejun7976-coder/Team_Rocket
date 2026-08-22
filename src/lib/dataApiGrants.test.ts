@@ -6,6 +6,7 @@ import bootstrapSql from "../../supabase/migrations/202608220004_system_admin_bo
 import recoveryBootstrapSql from "../../supabase/migrations/202608220005_recoverable_system_admin_bootstrap.sql?raw";
 import accessLogSql from "../../supabase/migrations/202608220007_admin_project_access_logs.sql?raw";
 import taskAndAISql from "../../supabase/migrations/202608220008_task_atomic_and_ai.sql?raw";
+import multiProviderSql from "../../supabase/migrations/202608220009_ai_registry_user_deletion_task_rpc.sql?raw";
 
 const authenticatedPrivileges = {
   profiles: ["select", "update"],
@@ -91,5 +92,14 @@ describe("Supabase Data API authorization contract", () => {
     expect(sql).toContain("alter table public.ai_usage_logs enable row level security;");
     expect(sql).toContain("revoke all on table public.ai_provider_settings, public.ai_usage_logs from public, anon, authenticated;");
     expect(sql).toContain("grant all on table public.ai_provider_settings, public.ai_usage_logs to service_role;");
+  });
+
+  it("keeps the multi-provider model registry RLS-protected and browser-inaccessible", () => {
+    const sql = multiProviderSql.toLowerCase();
+    for (const table of ["ai_provider_settings", "ai_model_settings"]) {
+      expect(sql).toContain(`alter table public.${table} enable row level security;`);
+    }
+    expect(sql).toContain("revoke all on table public.ai_provider_settings, public.ai_model_settings from public, anon, authenticated;");
+    expect(sql).toContain("grant all on table public.ai_provider_settings, public.ai_model_settings to service_role;");
   });
 });

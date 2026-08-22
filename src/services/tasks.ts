@@ -54,8 +54,9 @@ export interface CreateTaskInput {
   assigneeIds?: string[] | undefined;
 }
 
+export type TaskServiceErrorCode = "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_RPC_NOT_AVAILABLE" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED";
 export class TaskServiceError extends Error {
-  constructor(public readonly code: "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED", message: string) {
+  constructor(public readonly code: TaskServiceErrorCode, message: string, public readonly databaseCode?: string) {
     super(message);
     this.name = "TaskServiceError";
   }
@@ -67,13 +68,15 @@ function taskRpcError(error: { code?: string; message?: string } | null): TaskSe
   if (code === "RT401" || code === "RT403" || code === "42501" || message.includes("TASK_PERMISSION_DENIED")) {
     return new TaskServiceError("TASK_PERMISSION_DENIED", "이 프로젝트에서 작업을 생성할 권한이 없습니다.");
   }
-  if (code === "RT422" || message.includes("INVALID_ASSIGNEE")) {
+  if (code === "RT422" || code === "23503" || message.includes("INVALID_ASSIGNEE")) {
     return new TaskServiceError("INVALID_ASSIGNEE", "담당자는 현재 프로젝트 멤버여야 합니다.");
   }
-  if (code === "RT400" || code === "22000" || message.includes("TASK_INPUT_INVALID")) {
+  if (code === "RT400" || code === "22000" || code === "22007" || code === "22P02" || message.includes("TASK_INPUT_INVALID")) {
     return new TaskServiceError("TASK_INPUT_INVALID", "작업 입력값을 확인해 주세요.");
   }
-  return new TaskServiceError("TASK_CREATE_FAILED", "작업을 생성할 수 없습니다. (TASK_CREATE_FAILED)");
+  if (code === "PGRST202" || code === "42883") return new TaskServiceError("TASK_RPC_NOT_AVAILABLE", "작업 생성 RPC가 API schema cache에 없습니다. migration 009 적용 상태를 확인해 주세요. (TASK_RPC_NOT_AVAILABLE)", code);
+  const safeCode = code && /^[A-Z0-9]{2,12}$/u.test(code) ? code : "UNKNOWN";
+  return new TaskServiceError("TASK_CREATE_FAILED", `작업을 생성할 수 없습니다. (TASK_CREATE_FAILED/${safeCode})`, safeCode);
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
@@ -94,8 +97,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     p_status: input.status ?? "todo",
     p_priority: input.priority ?? "medium",
     p_progress: input.progress ?? 0,
-    p_start_date: input.startDate || null,
-    p_due_date: input.dueDate || null,
+    p_start_date: input.startDate?.trim() || null,
+    p_due_date: input.dueDate?.trim() || null,
     p_assignee_ids: [...new Set(input.assigneeIds ?? [])]
   });
   if (error || !data) throw taskRpcError(error);

@@ -36,7 +36,7 @@ export interface ProjectMember {
   github_sync_status: GitHubSyncStatus;
   github_error_code: string | null;
   created_at: string;
-  added_by: string;
+  added_by: string | null;
   profile?: Pick<Profile, "id" | "student_id" | "name" | "github_username" | "avatar_url" | "encryption_public_key">;
 }
 
@@ -66,7 +66,7 @@ export interface Project {
 export interface TaskAssignee {
   task_id: string;
   user_id: string;
-  assigned_by: string;
+  assigned_by: string | null;
   created_at: string;
   profile?: Pick<Profile, "id" | "student_id" | "name" | "avatar_url">;
 }
@@ -78,7 +78,7 @@ export interface ChecklistItem {
   content?: string;
   completed: boolean;
   position: number;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,7 +95,7 @@ export interface Task {
   progress_mode: ProgressMode;
   start_date: string | null;
   due_date: string | null;
-  created_by: string;
+  created_by: string | null;
   revision: number;
   deleted_at: string | null;
   created_at: string;
@@ -108,7 +108,7 @@ export interface Task {
 export interface Comment {
   id: string;
   task_id: string;
-  author_id: string;
+  author_id: string | null;
   content_encrypted: EncryptionEnvelope;
   content?: string;
   revision: number;
@@ -142,7 +142,7 @@ export interface ProjectFile {
   encrypted_size: number;
   chunk_count: number;
   checksum_encrypted: EncryptionEnvelope;
-  uploaded_by: string;
+  uploaded_by: string | null;
   deleted_at: string | null;
   created_at: string;
   uploader?: Pick<Profile, "id" | "name" | "avatar_url">;
