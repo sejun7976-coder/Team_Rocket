@@ -4,17 +4,18 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { Alert, Button, Input, Spinner } from "../components/ui";
 import { needsFirstLogin, validateNewPassword, type PasswordMode } from "../lib/authPolicy";
 import { isSupabaseConfigured } from "../lib/supabase";
-import { useAuthStore } from "../stores/authStore";
+import { FirstLoginReauthenticationError, useAuthStore } from "../stores/authStore";
 
 function Brand() {
   return <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/20"><Sparkles size={19} /></div><div><div className="font-extrabold tracking-tight text-ink">Project Manager</div><div className="text-[10px] font-bold uppercase tracking-[.16em] text-muted">Team Rocket workspace</div></div></div>;
 }
 
 export function LoginPage() {
-  const { user, profile, login, loading, error, clearError } = useAuthStore();
+  const { initialized, user, profile, login, loading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
+  if (!initialized) return <main className="flex min-h-screen items-center justify-center bg-canvas"><Spinner /></main>;
   if (user) return <Navigate to={needsFirstLogin(user, profile) ? "/first-login" : "/dashboard"} replace />;
 
   const submit = async (event: FormEvent) => {
@@ -33,12 +34,13 @@ export function LoginPage() {
 }
 
 export function FirstLoginPage() {
-  const { user, profile, completeFirstLogin, loading, error, logout } = useAuthStore();
+  const { initialized, user, profile, completeFirstLogin, loading, error, logout } = useAuthStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<PasswordMode>("pin");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  if (!initialized) return <main className="flex min-h-screen items-center justify-center bg-canvas"><Spinner /></main>;
   if (!user || !profile) return <Navigate to="/login" replace />;
   if (!needsFirstLogin(user, profile)) return <Navigate to="/dashboard" replace />;
 
@@ -51,7 +53,9 @@ export function FirstLoginPage() {
     try {
       await completeFirstLogin(password);
       navigate("/dashboard", { replace: true });
-    } catch { /* store error */ }
+    } catch (caught) {
+      if (caught instanceof FirstLoginReauthenticationError) navigate("/login", { replace: true });
+    }
   };
 
   return <main className="flex min-h-screen items-center justify-center bg-canvas p-4"><section className="panel w-full max-w-xl p-6 sm:p-9"><div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand"><KeyRound /></div><div className="eyebrow">First login</div><h1 className="mt-2 text-2xl font-extrabold text-ink">처음 로그인하셨습니다.</h1><p className="mt-2 text-sm leading-6 text-muted">{profile.name}님, 프로젝트를 사용하기 전에 새 PIN 또는 비밀번호를 설정해 주세요.</p><p className="mt-2 text-xs leading-5 text-muted">이전 변경이 중단된 뒤 다시 들어왔다면, 로그인할 때 사용한 새 PIN 또는 비밀번호를 그대로 입력하면 안전하게 완료됩니다.</p>
@@ -61,9 +65,10 @@ export function FirstLoginPage() {
 }
 
 export function UnlockPage() {
-  const { user, profile, keyring, unlockKeyring, loading, error } = useAuthStore();
+  const { initialized, keyringHydrated, user, profile, keyring, unlockKeyring, loading, error } = useAuthStore();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
+  if (!initialized || !keyringHydrated) return <main className="flex min-h-screen items-center justify-center bg-canvas"><Spinner /></main>;
   if (!user) return <Navigate to="/login" replace />;
   if (needsFirstLogin(user, profile)) return <Navigate to="/first-login" replace />;
   if (keyring) return <Navigate to="/dashboard" replace />;

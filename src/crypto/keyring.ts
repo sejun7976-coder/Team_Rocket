@@ -22,7 +22,7 @@ async function deriveUserKek(password: string, salt: Uint8Array, iterations: num
   }
 }
 
-async function importKeyring(publicJwk: JsonWebKey, privateJwk: JsonWebKey): Promise<UnlockedUserKeyring> {
+export async function importUserKeyring(publicJwk: JsonWebKey, privateJwk: JsonWebKey): Promise<UnlockedUserKeyring> {
   const [publicKey, privateKey] = await Promise.all([
     crypto.subtle.importKey("jwk", publicJwk, { name: "ECDH", namedCurve: "P-256" }, true, []),
     crypto.subtle.importKey("jwk", privateJwk, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"])
@@ -46,7 +46,7 @@ export async function createUserKeyring(password: string): Promise<{ record: Use
       keySalt: base64UrlEncode(salt),
       keyKdfIterations: USER_KEK_ITERATIONS
     },
-    keyring: await importKeyring(publicJwk, privateJwk)
+    keyring: await importUserKeyring(publicJwk, privateJwk)
   };
 }
 
@@ -59,7 +59,7 @@ export async function unlockUserKeyring(password: string, record: UserKeyringRec
   } catch {
     throw new Error("비밀번호가 올바르지 않거나 keyring이 손상되었습니다.");
   }
-  return importKeyring(record.encryptionPublicKey, privateJwk);
+  return importUserKeyring(record.encryptionPublicKey, privateJwk);
 }
 
 export async function protectUnlockedUserKeyring(password: string, keyring: UnlockedUserKeyring): Promise<UserKeyringRecord> {

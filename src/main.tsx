@@ -4,7 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { ConfigurationErrorScreen } from "./components/ConfigurationErrorScreen";
 import { isSupabaseConfigured, supabaseConfigurationIssues } from "./lib/supabase";
+import { initializeThemePreference } from "./stores/themeStore";
 import "./styles.css";
+
+initializeThemePreference();
 
 const queryClient = new QueryClient({
   defaultOptions: {

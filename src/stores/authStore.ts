@@ -2,13 +2,18 @@ import type { Session, User } from "@supabase/supabase-js";
 import { create } from "zustand";
 import {
   createUserKeyring,
+  clearExpiredSessionKeyrings,
+  clearSessionKeyring,
+  persistSessionKeyring,
   protectUnlockedUserKeyring,
+  restoreSessionKeyring,
   unlockUserKeyring,
   type UnlockedUserKeyring,
   type UserKeyringRecord
 } from "../crypto";
 import { deriveAuthCredential } from "../../supabase/functions/_shared/authCredential";
 import { needsFirstLogin } from "../lib/authPolicy";
+import { reauthenticateAfterFirstLogin, type FirstLoginAuthClient } from "../lib/firstLoginReauthentication";
 import { AuthenticatedFunctionError, invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 import { supabase } from "../lib/supabase";
 import { studentIdToInternalEmail } from "../lib/utils";
@@ -19,6 +24,7 @@ export type LoginDestination = "first-login" | "dashboard";
 
 interface AuthStore {
   initialized: boolean;
+  keyringHydrated: boolean;
   loading: boolean;
   session: Session | null;
   user: User | null;
@@ -30,13 +36,22 @@ interface AuthStore {
   completeFirstLogin: (newCredential: string) => Promise<void>;
   unlockKeyring: (credential: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
-  lockKeyring: () => void;
+  lockKeyring: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "요청을 처리할 수 없습니다.";
+}
+
+async function persistSessionKeyringWhenSupported(userId: string, keyring: UnlockedUserKeyring): Promise<void> {
+  try {
+    await persistSessionKeyring(userId, keyring);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("SECURE_SESSION_STORAGE_")) return;
+    throw error;
+  }
 }
 
 async function fetchProfile(userId: string): Promise<Profile> {
@@ -75,6 +90,15 @@ interface FirstLoginCompletion {
   keyringReused?: boolean;
 }
 
+const FIRST_LOGIN_REAUTHENTICATION_MESSAGE = "PIN/비밀번호 설정은 완료되었습니다. 새 로그인 세션을 만들지 못했습니다. 다시 로그인해 주세요.";
+
+export class FirstLoginReauthenticationError extends Error {
+  constructor() {
+    super(FIRST_LOGIN_REAUTHENTICATION_MESSAGE);
+    this.name = "FirstLoginReauthenticationError";
+  }
+}
+
 async function invokeFirstLoginCompletion(authCredential: string, record: UserKeyringRecord): Promise<FirstLoginCompletion> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -99,36 +123,27 @@ async function invokeFirstLoginCompletion(authCredential: string, record: UserKe
 
 async function rebuildCompletedSession(
   userId: string,
+  studentId: string,
   credential: string
 ): Promise<{ session: Session; user: User; profile: Profile; keyring: UnlockedUserKeyring }> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !refreshed.session) continue;
-
-      const { data: verified, error: userError } = await supabase.auth.getUser();
-      if (userError || !verified.user || verified.user.id !== userId) continue;
-
-      const profile = await fetchProfile(userId);
-      if (needsFirstLogin(verified.user, profile)) continue;
-      const record = keyringRecord(profile);
-      if (!record) continue;
-      const keyring = await unlockUserKeyring(credential, record);
-      return {
-        session: { ...refreshed.session, user: verified.user },
-        user: verified.user,
-        profile,
-        keyring
-      };
-    } catch {
-      // 즉시 한 번 더 refresh/getUser/profile을 검증한다. 지연 시간에 의존하지 않는다.
-    }
-  }
-  throw new Error("계정 초기 설정은 완료되었지만 로그인 세션을 갱신할 수 없습니다. 로그아웃한 뒤 새 PIN 또는 비밀번호로 다시 로그인하세요.");
+  const authenticated = await reauthenticateAfterFirstLogin(
+    supabase as unknown as FirstLoginAuthClient,
+    studentId,
+    userId,
+    credential
+  );
+  const profile = await fetchProfile(userId);
+  if (needsFirstLogin(authenticated.user, profile)) throw new Error("FIRST_LOGIN_REAUTHENTICATION_FAILED");
+  const record = keyringRecord(profile);
+  if (!record) throw new Error("FIRST_LOGIN_REAUTHENTICATION_FAILED");
+  const keyring = await unlockUserKeyring(credential, record);
+  await persistSessionKeyringWhenSupported(userId, keyring);
+  return { session: authenticated.session, user: authenticated.user, profile, keyring };
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   initialized: false,
+  keyringHydrated: false,
   loading: true,
   session: null,
   user: null,
@@ -137,18 +152,23 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   error: null,
 
   initialize: async () => {
-    set({ loading: true });
+    set({ loading: true, initialized: false, keyringHydrated: false });
+    await clearExpiredSessionKeyrings().catch(() => undefined);
     const { data } = await supabase.auth.getSession();
     try {
       const profile = data.session ? await fetchProfile(data.session.user.id) : null;
       if (data.session && profile && accountIsInactive(data.session.user, profile)) {
         await supabase.auth.signOut();
-        set({ initialized: true, loading: false, session: null, user: null, profile: null, keyring: null, error: "비활성화된 계정입니다." });
+        await clearSessionKeyring(data.session.user.id);
+        set({ initialized: true, keyringHydrated: true, loading: false, session: null, user: null, profile: null, keyring: null, error: "비활성화된 계정입니다." });
         return;
       }
-      set({ initialized: true, loading: false, session: data.session, user: data.session?.user ?? null, profile, keyring: null });
+      const keyring = data.session && profile && keyringRecord(profile)
+        ? await restoreSessionKeyring(data.session.user.id)
+        : null;
+      set({ initialized: true, keyringHydrated: true, loading: false, session: data.session, user: data.session?.user ?? null, profile, keyring });
     } catch (error) {
-      set({ initialized: true, loading: false, session: data.session, user: data.session?.user ?? null, error: errorMessage(error) });
+      set({ initialized: true, keyringHydrated: true, loading: false, session: data.session, user: data.session?.user ?? null, keyring: null, error: errorMessage(error) });
     }
   },
 
@@ -167,7 +187,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (needsFirstLogin(data.user, profile)) {
         const existing = keyringRecord(profile);
         const keyring = existing ? await unlockUserKeyring(credential, existing) : null;
-        set({ loading: false, session: data.session, user: data.user, profile, keyring });
+        if (keyring) await persistSessionKeyringWhenSupported(data.user.id, keyring);
+        set({ loading: false, keyringHydrated: true, session: data.session, user: data.user, profile, keyring });
         recordAccessEventBestEffort("login");
         return "first-login";
       }
@@ -182,7 +203,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         profile = await fetchProfile(data.user.id);
         keyring = created.keyring;
       }
-      set({ loading: false, session: data.session, user: data.user, profile, keyring });
+      await persistSessionKeyringWhenSupported(data.user.id, keyring);
+      set({ loading: false, keyringHydrated: true, session: data.session, user: data.user, profile, keyring });
       recordAccessEventBestEffort("login");
       return "dashboard";
     } catch (error) {
@@ -209,9 +231,28 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         : await createUserKeyring(newCredential);
       const authCredential = await deriveAuthCredential(currentProfile.student_id, newCredential);
       await invokeFirstLoginCompletion(authCredential, protectedKeyring.record);
-      const rebuilt = await rebuildCompletedSession(currentUser.id, newCredential);
+      let rebuilt: Awaited<ReturnType<typeof rebuildCompletedSession>>;
+      try {
+        rebuilt = await rebuildCompletedSession(currentUser.id, currentProfile.student_id, newCredential);
+      } catch {
+        await clearSessionKeyring(currentUser.id);
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        const reauthenticationError = new FirstLoginReauthenticationError();
+        set({
+          initialized: true,
+          keyringHydrated: true,
+          loading: false,
+          session: null,
+          user: null,
+          profile: null,
+          keyring: null,
+          error: reauthenticationError.message
+        });
+        throw reauthenticationError;
+      }
       set({
         initialized: true,
+        keyringHydrated: true,
         loading: false,
         session: rebuilt.session,
         user: rebuilt.user,
@@ -228,12 +269,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   unlockKeyring: async (credential) => {
     const profile = get().profile;
+    if (!profile) throw new Error("프로필을 찾을 수 없습니다. 다시 로그인해 주세요.");
     const record = profile ? keyringRecord(profile) : null;
     if (!record) throw new Error("암호화 keyring이 설정되지 않았습니다. 다시 로그인해 주세요.");
     set({ loading: true, error: null });
     try {
       const keyring = await unlockUserKeyring(credential, record);
-      set({ loading: false, keyring });
+      await persistSessionKeyringWhenSupported(profile.id, keyring);
+      set({ loading: false, keyringHydrated: true, keyring });
     } catch (error) {
       set({ loading: false, error: errorMessage(error) });
       throw error;
@@ -246,12 +289,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ profile: await fetchProfile(userId) });
   },
 
-  lockKeyring: () => set({ keyring: null }),
+  lockKeyring: async () => {
+    const userId = get().user?.id ?? null;
+    set({ keyring: null, keyringHydrated: true });
+    await clearSessionKeyring(userId);
+  },
 
   logout: async () => {
+    const userId = get().user?.id ?? null;
     await recordAccessEvent("logout").catch(() => undefined);
+    set({ keyring: null });
+    await clearSessionKeyring(userId);
     await supabase.auth.signOut();
-    set({ session: null, user: null, profile: null, keyring: null, error: null });
+    set({ initialized: true, keyringHydrated: true, session: null, user: null, profile: null, keyring: null, error: null });
   },
 
   clearError: () => set({ error: null })

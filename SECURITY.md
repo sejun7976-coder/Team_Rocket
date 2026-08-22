@@ -29,8 +29,8 @@ UI는 학번을 받지만 Supabase Auth에는 정규식 검증한 학번을 dete
 - AAD는 `rocket:v1:{projectId}:{entityType}:{entityId}[:chunkIndex]`로 row swap/chunk reorder를 탐지한다.
 - DEK는 각 member의 P-256 public key에 ECDH/HKDF 기반으로 wrapping한다.
 - 사용자 private key는 로그인 password 기반 PBKDF2(최소 310,000 iterations, random salt) KEK로 암호화한다.
-- password, KEK, private key, project DEK는 localStorage/sessionStorage/IndexedDB에 저장하지 않는다.
-- keyring은 refresh/logout/수동 lock 때 memory에서 제거한다.
+- 원문 password/PIN, derived Auth credential, KEK, 평문 private JWK, project DEK는 localStorage/sessionStorage/IndexedDB에 저장하지 않는다.
+- 활성 탭의 F5 복구에는 non-extractable AES-256-GCM `CryptoKey`와 그 키로 암호화한 private JWK envelope만 IndexedDB에 structured clone으로 보관한다. 탭 식별자와 비민감 마지막 활동 시각을 결합하며, 15분 미사용 또는 logout 시 IndexedDB record와 memory keyring을 모두 제거한다.
 
 멤버 추가를 위해 unlock된 Project `CryptoKey`에 대응하는 raw 32-byte material을 모듈 내부 `WeakMap`에만 보관한다. UI/store에서 raw key를 읽을 수 없고 lock 시 즉시 덮어쓴 뒤 삭제한다. 영구 저장소에는 member별 wrapped key만 존재한다.
 

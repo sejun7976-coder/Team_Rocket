@@ -21,9 +21,9 @@ function LoadingScreen() {
 }
 
 function ProtectedLayout() {
-  const { initialized, loading, user, profile, keyring } = useAuthStore();
+  const { initialized, keyringHydrated, loading, user, profile, keyring } = useAuthStore();
   const location = useLocation();
-  if (!initialized || loading) return <LoadingScreen />;
+  if (!initialized || !keyringHydrated || loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (needsFirstLogin(user, profile)) return <Navigate to="/first-login" replace />;
   if (!canEnterBusinessRoutes(user, profile)) return <Navigate to="/login" replace />;

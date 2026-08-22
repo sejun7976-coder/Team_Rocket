@@ -8,6 +8,7 @@ import migrationSource from "../../supabase/migrations/202608220006_idempotent_f
 import authStoreSource from "../stores/authStore.ts?raw";
 import appSource from "../App.tsx?raw";
 import authPagesSource from "../pages/AuthPages.tsx?raw";
+import reauthenticationSource from "./firstLoginReauthentication.ts?raw";
 import corsPolicySource from "../../supabase/functions/_shared/corsPolicy.ts?raw";
 import { needsFirstLogin } from "./authPolicy";
 import type { Profile } from "../types/domain";
@@ -68,10 +69,13 @@ describe("recoverable first-login orchestration", () => {
     expect(edgeSource).not.toContain("newCredential");
   });
 
-  it("retries without sleeps and rebuilds state from refreshed server data", () => {
+  it("retries completion without sleeps and rebuilds state through a new sign-in", () => {
     expect(authStoreSource).toContain("attempt < 2");
-    expect(authStoreSource).toContain("supabase.auth.refreshSession()");
-    expect(authStoreSource).toContain("supabase.auth.getUser()");
+    expect(authStoreSource).toContain("reauthenticateAfterFirstLogin");
+    expect(reauthenticationSource).toContain("client.auth.signInWithPassword");
+    expect(reauthenticationSource).toContain("client.auth.getSession()");
+    expect(reauthenticationSource).toContain("client.auth.getUser()");
+    expect(reauthenticationSource).not.toContain("refreshSession");
     expect(authStoreSource).toContain("const profile = await fetchProfile(userId)");
     expect(authStoreSource).not.toMatch(/setTimeout|sleep\s*\(/u);
   });
@@ -91,9 +95,11 @@ describe("recoverable first-login orchestration", () => {
     expect(authPagesSource).toContain("needsFirstLogin(user, profile)");
   });
 
-  it("shows a recovery-safe retry message instead of claiming the password did not change", () => {
-    expect(authStoreSource).toContain("로그인 암호는 변경되었을 수 있지만 계정 초기 설정을 완료하지 못했습니다");
-    expect(authPagesSource).toContain("로그인할 때 사용한 새 PIN 또는 비밀번호를 그대로 입력");
+  it("redirects to login with an honest message when the post-finalize sign-in fails", () => {
+    expect(authStoreSource).toContain("PIN/비밀번호 설정은 완료되었습니다. 새 로그인 세션을 만들지 못했습니다. 다시 로그인해 주세요.");
+    expect(authStoreSource).toContain('supabase.auth.signOut({ scope: "local" })');
+    expect(authPagesSource).toContain("caught instanceof FirstLoginReauthenticationError");
+    expect(authPagesSource).toContain('navigate("/login", { replace: true })');
   });
 
   it("normalizes a pathful GitHub Pages URL before comparing browser Origin", () => {
