@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(76);
+select plan(80);
 
 -- Exact browser privilege matrix. Extra privileges fail this test just like missing ones.
 with expected(table_name, can_select, can_insert, can_update, can_delete) as (values
@@ -15,6 +15,7 @@ with expected(table_name, can_select, can_insert, can_update, can_delete) as (va
   ('comments', true, true, true, false),
   ('activities', true, false, false, false),
   ('files', true, true, false, true),
+  ('file_folders', true, true, false, true),
   ('notifications', true, false, true, false),
   ('github_sync_jobs', true, false, false, false),
   ('admin_audit_logs', false, false, false, false),
@@ -41,7 +42,7 @@ from expected;
 with business_tables(table_name) as (values
   ('profiles'), ('projects'), ('project_members'), ('project_keys'), ('tasks'),
   ('task_assignees'), ('task_checklist_items'), ('comments'), ('activities'),
-  ('files'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
+  ('files'), ('file_folders'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
   ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_gateway_settings'), ('ai_model_settings'), ('ai_usage_logs')
 )
 select ok(
@@ -60,7 +61,7 @@ from business_tables;
 with business_tables(table_name) as (values
   ('profiles'), ('projects'), ('project_members'), ('project_keys'), ('tasks'),
   ('task_assignees'), ('task_checklist_items'), ('comments'), ('activities'),
-  ('files'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
+  ('files'), ('file_folders'), ('notifications'), ('github_sync_jobs'), ('admin_audit_logs'),
   ('system_admin_bootstrap_state'), ('user_access_logs'), ('ai_provider_settings'), ('ai_gateway_settings'), ('ai_model_settings'), ('ai_usage_logs')
 )
 select ok(
@@ -86,6 +87,7 @@ with expected(table_name, can_select, can_insert, can_update, can_delete) as (va
   ('comments', true, true, true, false),
   ('activities', true, false, false, false),
   ('files', true, true, false, true),
+  ('file_folders', true, true, false, true),
   ('notifications', true, false, true, false),
   ('github_sync_jobs', true, false, false, false),
   ('admin_audit_logs', false, false, false, false),

@@ -27,7 +27,7 @@ async function decryptTask(task: Task, key: CryptoKey): Promise<Task> {
 export async function listTasks(projectId: string): Promise<Task[]> {
   const key = await projectKey(projectId);
   const { data, error } = await supabase.from("tasks").select(
-    "*, task_assignees(*, profile:profiles!task_assignees_user_id_fkey(id, student_id, name, avatar_url)), task_checklist_items(*), comments(count)"
+    "*, task_assignees(*, profile:profiles!task_assignees_user_id_fkey(id, student_id, name, avatar_url)), task_checklist_items(*), comments(count), files(count)"
   ).eq("project_id", projectId).is("deleted_at", null).order("updated_at", { ascending: false });
   if (error) throw new Error("작업 목록을 불러올 수 없습니다.");
   return Promise.all(((data ?? []) as unknown as Task[]).map((task) => decryptTask(task, key)));

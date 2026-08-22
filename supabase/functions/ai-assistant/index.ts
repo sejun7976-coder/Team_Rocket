@@ -34,10 +34,31 @@ function sanitizeProjectContext(value: unknown): Record<string, unknown> {
       assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds.filter((id): id is string => typeof id === "string").slice(0, 50) : []
     };
   }) : [];
+  const activities = Array.isArray(context.activities) ? context.activities.slice(0, 50).map((item) => {
+    const activity = record(item);
+    return {
+      action: optionalText(activity.action, 80),
+      subjectType: optionalText(activity.subjectType, 40),
+      actorId: optionalText(activity.actorId, 36),
+      createdAt: optionalText(activity.createdAt, 40)
+    };
+  }) : [];
+  const files = Array.isArray(context.files) ? context.files.slice(0, 50).map((item) => {
+    const file = record(item);
+    return {
+      name: optionalText(file.name, 240),
+      contentType: optionalText(file.contentType, 120),
+      sizeBytes: typeof file.sizeBytes === "number" && Number.isFinite(file.sizeBytes) ? file.sizeBytes : null,
+      taskId: optionalText(file.taskId, 36),
+      createdAt: optionalText(file.createdAt, 40)
+    };
+  }) : [];
   return {
     project: context.project ? { name: optionalText(project.name, 200), status: optionalText(project.status, 30) } : null,
     members,
-    tasks
+    tasks,
+    activities,
+    files
   };
 }
 
@@ -69,10 +90,17 @@ serve(async (request) => {
 
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
   let intent: AIIntent = detectIntent(lastUserMessage);
-  let githubActivity: Array<{ sha: string; message: string; authoredAt: string | null }> = [];
-  if (intent === "github_summary") {
+  let githubActivity: Array<{ sha: string; message: string; authoredAt: string | null; author: string | null }> = [];
+  if (["github_summary", "project_summary", "weekly_report"].includes(intent)) {
     const { data: project } = await admin.from("projects").select("github_repository_name, github_repository_url").eq("id", projectId).single();
-    if (project?.github_repository_url) githubActivity = await listRecentCommits(project.github_repository_name);
+    if (project?.github_repository_url) {
+      try {
+        githubActivity = await listRecentCommits(project.github_repository_name);
+      } catch {
+        // GitHub is an optional integration. AI project assistance remains available.
+        githubActivity = [];
+      }
+    }
   }
 
   const controller = new AbortController();
@@ -82,12 +110,12 @@ serve(async (request) => {
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
   try {
-    const prompt = JSON.stringify({ intentHint: intent, messages, context: projectContext, githubActivity, today: new Date().toISOString().slice(0, 10) });
+    const prompt = JSON.stringify({ intentHint: intent, messages, context: { ...projectContext, currentUserId: user.id }, githubActivity, today: new Date().toISOString().slice(0, 10) });
     const response = await callAIGateway({
       baseUrl: gateway.base_url,
       apiKey: await decryptGatewayKey(gateway.api_key_ciphertext, gateway.api_key_iv),
       model: model.model_id,
-      system: `You are Rocket AI, a Korean project-management assistant. Infer the user's intent from chat, using one of: chat, create_task, split_task, project_briefing, project_summary, weekly_report, project_qa, github_summary. Never claim that you changed data. For mutations return task proposals only until the user confirms in the browser. Use only supplied context and member UUIDs. Return only JSON matching this schema: ${JSON.stringify(rocketAIJsonSchema)}`,
+      system: `You are Rocket AI, a Korean project-management assistant for Team Rocket. Infer the user's intent from chat, using one of: chat, create_task, split_task, project_briefing, project_summary, weekly_report, project_qa, github_summary. For briefings prioritize the current user's due dates, overdue tasks, priority and status. For weekly reports organize completed work, work in progress, issues and next-week plans using tasks, activity, file metadata and recent commits. File context contains metadata only, never document contents. Never claim that you changed data. For mutations return task proposals only until the user confirms in the browser. Use only supplied context and member UUIDs. Return only JSON matching this schema: ${JSON.stringify(rocketAIJsonSchema)}`,
       prompt,
       signal: controller.signal
     });

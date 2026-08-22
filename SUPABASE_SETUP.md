@@ -1,6 +1,6 @@
 # Supabase 설정
 
-이 문서는 Rocket Campus의 실제 Supabase 프로젝트를 준비하는 순서다. Browser에는 `VITE_SUPABASE_URL`과 publishable key만 제공한다. service role key는 절대 `.env`, GitHub Pages, 브라우저 bundle에 넣지 않는다.
+이 문서는 Team Rocket의 실제 Supabase 프로젝트를 준비하는 순서다. Browser에는 `VITE_SUPABASE_URL`과 publishable key만 제공한다. service role key는 절대 `.env`, GitHub Pages, 브라우저 bundle에 넣지 않는다.
 
 ## 1. 프로젝트 연결과 Migration
 
@@ -25,6 +25,10 @@ Migration은 반드시 순서대로 적용한다.
 10. `202608220010_fix_domain_activity_triggers.sql`: table별 활동 trigger 분리, `tasks` row에 없는 `user_id` 참조 제거
 11. `202608220011_fix_task_deletion.sql`: Task cascade 삭제 시 assignee DELETE trigger의 부모 재조회 실패 방지
 12. `202608220012_single_ai_gateway.sql`: service-role 전용 단일 AI Gateway와 32개 모델 registry, 전역 default 제약
+13. `202608220013_enhance_project_notification_types.sql`: task/comment/file/overdue notification enum 확장
+14. `202608220014_virtual_file_folders.sql`: 암호화된 가상 폴더 metadata, `files.folder_id`, GRANT와 RLS
+15. `202608220015_decouple_project_github_status.sql`: 선택형 GitHub 연동과 프로젝트 상태를 분리하는 service-role RPC
+16. `202608220016_materialize_project_notifications.sql`: task/comment/file notification trigger와 사용자별 마감 알림 refresh RPC
 
 SQL Editor에서 table을 수동 생성하지 않는다.
 

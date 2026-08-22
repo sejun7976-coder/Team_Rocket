@@ -3,6 +3,8 @@ import { Check, ChevronDown, MessageSquarePlus, Minus, Search, Send, Sparkles, X
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { listAIModels, requestRocketAI, type AIConversationMessage, type AIModelChoice, type RocketAIResponse } from "../services/ai";
+import { listActivities } from "../services/activity";
+import { listFiles } from "../services/files";
 import { listProjectMembers, listProjects } from "../services/projects";
 import { createTask, listTasks } from "../services/tasks";
 import { useRocketAIStore } from "../stores/rocketAIStore";
@@ -48,6 +50,8 @@ export function RocketAIPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const tasks = useQuery({ queryKey: ["tasks", projectId], queryFn: () => listTasks(projectId), enabled: opened && Boolean(projectId) });
   const members = useQuery({ queryKey: ["members", projectId], queryFn: () => listProjectMembers(projectId), enabled: opened && Boolean(projectId) });
+  const activities = useQuery({ queryKey: ["activities", projectId], queryFn: () => listActivities(projectId), enabled: opened && Boolean(projectId) });
+  const files = useQuery({ queryKey: ["files", projectId], queryFn: () => listFiles(projectId), enabled: opened && Boolean(projectId) });
 
   useEffect(() => {
     if (routeProjectId && projects.data?.some((item) => item.id === routeProjectId)) setProjectId(routeProjectId);
@@ -78,7 +82,9 @@ export function RocketAIPanel() {
       : null,
     members: members.data?.map((member) => ({ id: member.user_id, name: member.profile?.name, studentId: member.profile?.student_id })) ?? [],
     tasks: tasks.data?.slice(0, 100).map((task) => ({ id: task.id, title: task.title, description: task.description, status: task.status, priority: task.priority, dueDate: task.due_date, progress: task.progress, assigneeIds: task.task_assignees?.map((item) => item.user_id) ?? [] })) ?? [],
-  }), [members.data, projectId, projects.data, tasks.data]);
+    activities: activities.data?.slice(0, 50).map((activity) => ({ action: activity.action, subjectType: activity.subject_type, actorId: activity.actor_id, createdAt: activity.created_at })) ?? [],
+    files: files.data?.slice(0, 50).map((file) => ({ name: file.filename, contentType: file.mime_type, sizeBytes: file.original_size, taskId: file.task_id, createdAt: file.created_at })) ?? [],
+  }), [activities.data, files.data, members.data, projectId, projects.data, tasks.data]);
   const selectedModel = models.data?.find((model) => model.id === modelId);
   const visibleModels = useMemo(() => {
     const query = modelSearch.trim().toLowerCase();

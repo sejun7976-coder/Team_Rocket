@@ -20,7 +20,7 @@ export interface GitHubRepository {
   homepage: string | null;
 }
 
-export interface GitHubCommitSummary { sha: string; message: string; authoredAt: string | null }
+export interface GitHubCommitSummary { sha: string; message: string; author: string | null; authoredAt: string | null }
 
 export interface CreateGitHubRepositoryInput {
   projectId: string;
@@ -267,7 +267,7 @@ export class GitHubClient {
       const commit = record.commit && typeof record.commit === "object" && !Array.isArray(record.commit) ? record.commit as Record<string, unknown> : null;
       const author = commit?.author && typeof commit.author === "object" && !Array.isArray(commit.author) ? commit.author as Record<string, unknown> : null;
       if (typeof record.sha !== "string" || typeof commit?.message !== "string") return [];
-      return [{ sha: record.sha.slice(0, 12), message: commit.message.slice(0, 500), authoredAt: typeof author?.date === "string" ? author.date : null }];
+      return [{ sha: record.sha.slice(0, 12), message: commit.message.slice(0, 500), author: typeof author?.name === "string" ? author.name.slice(0, 100) : null, authoredAt: typeof author?.date === "string" ? author.date : null }];
     });
   }
 }

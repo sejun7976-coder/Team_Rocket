@@ -8,6 +8,9 @@ import accessLogSql from "../../supabase/migrations/202608220007_admin_project_a
 import taskAndAISql from "../../supabase/migrations/202608220008_task_atomic_and_ai.sql?raw";
 import multiProviderSql from "../../supabase/migrations/202608220009_ai_registry_user_deletion_task_rpc.sql?raw";
 import singleGatewaySql from "../../supabase/migrations/202608220012_single_ai_gateway.sql?raw";
+import notificationSql from "../../supabase/migrations/202608220016_materialize_project_notifications.sql?raw";
+import fileFoldersSql from "../../supabase/migrations/202608220014_virtual_file_folders.sql?raw";
+import projectGitHubSql from "../../supabase/migrations/202608220015_decouple_project_github_status.sql?raw";
 
 const authenticatedPrivileges = {
   profiles: ["select", "update"],
@@ -112,5 +115,34 @@ describe("Supabase Data API authorization contract", () => {
     expect(sql).toContain("grant all on table public.ai_gateway_settings to service_role;");
     expect(sql).toContain("revoke all on table public.ai_model_settings from public, anon, authenticated;");
     expect(sql).not.toMatch(/grant\s+[\s\S]*?ai_gateway_settings[\s\S]*?\s+to\s+(anon|authenticated)\s*;/iu);
+  });
+
+  it("adds notification refresh with authenticated RPC access but no elevated table grant", () => {
+    const sql = notificationSql.toLowerCase();
+    expect(sql).toContain("grant execute on function public.refresh_due_notifications() to authenticated;");
+    expect(sql).toContain("revoke all on function public.refresh_due_notifications() from public, anon, authenticated;");
+    expect(sql).toContain("auth.uid() is null or not public.current_account_ready()");
+  });
+
+  it("protects virtual folders with explicit grants, RLS policies and cross-project validation", () => {
+    const sql = fileFoldersSql.toLowerCase();
+    expect(sql).toContain("alter table public.file_folders enable row level security;");
+    expect(sql).toContain("alter table public.file_folders force row level security;");
+    expect(sql).toContain("revoke all on table public.file_folders from public, anon, authenticated;");
+    expect(sql).toContain("grant select, insert, delete on table public.file_folders to authenticated;");
+    expect(sql).toContain("grant update(folder_id) on table public.files to authenticated;");
+    for (const operation of ["select", "insert", "delete"]) {
+      expect(sql).toContain(`on public.file_folders for ${operation}`);
+    }
+    expect(sql).toContain("raise exception using errcode = '23514'");
+  });
+
+  it("keeps optional GitHub project finalizers service-role-only", () => {
+    const sql = projectGitHubSql.toLowerCase();
+    for (const signature of ["finalize_project_without_repository(uuid)", "mark_project_github_error(uuid, text)"]) {
+      expect(sql).toContain(`revoke all on function public.${signature}`);
+      expect(sql).toContain(`grant execute on function public.${signature}`);
+    }
+    expect(sql).toContain("auth.role() <> 'service_role'");
   });
 });

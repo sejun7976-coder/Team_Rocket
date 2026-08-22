@@ -79,7 +79,7 @@ serve(async (request) => {
           error_code: code,
           attempts
         }, { onConflict: "project_id,user_id,action" }),
-        admin.rpc("mark_project_creation_error", { p_project_id: projectId, p_error_code: code })
+        admin.rpc("mark_project_github_error", { p_project_id: projectId, p_error_code: code })
       ]);
       throw error;
     }

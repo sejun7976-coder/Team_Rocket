@@ -121,7 +121,7 @@ describe("single-gateway Rocket AI", () => {
 
   it("whitelists project context before the Gateway and never forwards opaque browser context", () => {
     expect(aiAssistant).toContain("sanitizeProjectContext(body.context)");
-    expect(aiAssistant).toContain("context: projectContext");
+    expect(aiAssistant).toContain("context: { ...projectContext, currentUserId: user.id }");
     expect(aiAssistant).not.toContain("context: body.context");
     for (const forbidden of ["projectKey", "keyring", "privateKey", "credential"]) expect(aiAssistant).not.toContain(forbidden);
   });
@@ -201,7 +201,8 @@ describe("GitHub reconciliation", () => {
     expect(projectPages).toContain('queryKey: ["github-repository-status"');
     expect(projectPages).toContain('queryKey: ["project", project.id]');
     expect(projectPages).toContain('queryKey: ["projects"]');
-    expect(projectPages).toContain('project.status === "active" ? "활성"');
+    expect(projectPages).toContain('role === "owner"');
+    expect(projectPages).toContain("<GitHubIntegrationSection />");
     expect(projectPages).toContain('state === "connected"');
     expect(projectPages).toContain('"미연결"');
     expect(projectPages).toContain('repositoryStatus.data?.status !== "recoverable"');

@@ -46,9 +46,9 @@ describe("integrated project security features", () => {
   });
 
   it("makes GitHub management owner-only in UI, direct route and server", () => {
-    expect(projectPages).toContain('path !== "github" || isOwner');
-    expect(projectPages).toContain("project.data.created_by === user?.id");
-    expect(secondaryPages).toContain("<Navigate to={`/projects/${project.id}`} replace />");
+    expect(projectPages).not.toContain('path: "github"');
+    expect(secondaryPages).toContain('role === "owner"');
+    expect(secondaryPages).toContain("<GitHubIntegrationSection />");
     expect(retryFunction).toContain('action === "create_repository" ? actor.role !== "owner"');
     expect(deleteFunction).toContain('"PROJECT_OWNER_REQUIRED"');
   });

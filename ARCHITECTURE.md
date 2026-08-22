@@ -1,8 +1,10 @@
-# Rocket Campus Architecture
+# Team Rocket Architecture
 
 ## 목표
 
-Rocket Campus는 5~10명의 대학생이 3~4개 프로젝트를 관리하는 SPA다. GitHub Pages에는 정적 React bundle만 배포하고, 인증·업무 데이터·권한·Realtime·파일은 Supabase가 담당한다. Supabase Edge Functions만 GitHub credential을 보유하며 실제 프로젝트 repository를 생성하고 collaborator를 동기화한다.
+Team Rocket은 5~10명의 대학생이 3~4개 프로젝트를 관리하는 AI 중심 SPA다. GitHub Pages에는 정적 React bundle만 배포하고, 인증·업무 데이터·권한·Realtime·파일은 Supabase가 담당한다. GitHub는 선택형 보조 통합이며 Supabase Edge Functions만 credential을 보유하고 repository 생성과 collaborator 동기화를 수행한다.
+
+현재 Files v1은 암호화된 가상 폴더·검색·정렬·필터에 집중한다. 파일 versioning은 기존 Storage object와 암호화 envelope를 바꾸지 않는 별도 metadata 설계로 후속 작업한다. Rocket AI에는 파일명·형식·크기·연결 Task·업로드 시각만 전달하며, 문서 본문은 향후 사용자가 명시적으로 "AI로 요약"을 실행하고 전송을 확인하는 흐름에서만 지원한다.
 
 ```text
 GitHub Pages (HashRouter SPA)

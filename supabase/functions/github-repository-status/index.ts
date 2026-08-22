@@ -1,5 +1,5 @@
 import { requireReadyUser } from "../_shared/auth.ts";
-import { configuredOwner, getRepository, repositoryMarkerStatus, upgradeRepositoryMarker } from "../_shared/github.ts";
+import { configuredOwner, getRepository, listRecentCommits, repositoryMarkerStatus, upgradeRepositoryMarker } from "../_shared/github.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
 import { requireUuid } from "../_shared/validation.ts";
 
@@ -17,13 +17,13 @@ serve(async (request) => {
   if (!repository) {
     await admin.from("projects").update({ github_repository_id: null, github_repository_url: null, github_owner: null, github_sync_status: "not_connected", github_error_code: null }).eq("id", projectId);
     await admin.from("github_sync_jobs").upsert({ project_id: projectId, user_id: project.created_by, action: "create_repository", status: "not_connected", error_code: "GITHUB_REPOSITORY_MISSING" }, { onConflict: "project_id,user_id,action" });
-    return json(request, { status: "missing", reconciled: Boolean(project.github_repository_id || project.github_repository_url), repositoryUrl: null });
+    return json(request, { status: "missing", reconciled: Boolean(project.github_repository_id || project.github_repository_url), repositoryUrl: null, commits: [] });
   }
   const marker = repositoryMarkerStatus(repository, projectId);
   const trustedMetadata = project.github_repository_id === repository.id
     || project.github_repository_url === repository.html_url;
   if (marker === "mismatch" || (marker === "missing" && !trustedMetadata)) {
-    return json(request, { status: "conflict", reconciled: false, repositoryUrl: null, reason: marker === "missing" ? "MARKER_MISSING" : "MARKER_MISMATCH" });
+    return json(request, { status: "conflict", reconciled: false, repositoryUrl: null, reason: marker === "missing" ? "MARKER_MISSING" : "MARKER_MISMATCH", commits: [] });
   }
   const upgradedRepository = marker === "legacy" || marker === "missing"
     ? await upgradeRepositoryMarker(repository.name, projectId)
@@ -38,5 +38,6 @@ serve(async (request) => {
     if (error || !data) throw new ApiError(500, "PROJECT_FINALIZE_FAILED", "Repository 연결 정보를 복구할 수 없습니다.");
     await admin.from("github_sync_jobs").upsert({ project_id: projectId, user_id: project.created_by, action: "create_repository", status: "synced", error_code: null }, { onConflict: "project_id,user_id,action" });
   }
-  return json(request, { status: needsRecovery ? "recoverable" : "connected", reconciled: needsRecovery, repositoryUrl: upgradedRepository.html_url, recoveryReason: marker === "legacy" ? "LEGACY_MARKER_UPGRADED" : marker === "missing" ? "TRUSTED_METADATA_MARKER_RESTORED" : null });
+  const commits = await listRecentCommits(upgradedRepository.name);
+  return json(request, { status: needsRecovery ? "recoverable" : "connected", reconciled: needsRecovery, repositoryUrl: upgradedRepository.html_url, recoveryReason: marker === "legacy" ? "LEGACY_MARKER_UPGRADED" : marker === "missing" ? "TRUSTED_METADATA_MARKER_RESTORED" : null, commits });
 });

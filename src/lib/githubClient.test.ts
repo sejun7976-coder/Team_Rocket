@@ -172,6 +172,22 @@ describe("GitHub Repository client", () => {
     expect(String(fetcher.mock.calls[1]?.[0])).toBe(`https://api.github.com/repos/${owner}/ai-pilot`);
   });
 
+  it("returns only bounded recent commit metadata including author and timestamp", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain("commits?per_page=10");
+      return new Response(JSON.stringify([{ sha: "abcdef1234567890", commit: { message: "fix dashboard\nbody", author: { name: "박세준", date: "2026-08-22T10:00:00Z" } } }]), { status: 200 });
+    });
+    const client = new GitHubClient({ token: fakeToken, owner, ownerType: "user", projectManagerUrl }, fetcher);
+
+    await expect(client.listRecentCommits("ai-pilot")).resolves.toEqual([{
+      sha: "abcdef123456",
+      message: "fix dashboard\nbody",
+      author: "박세준",
+      authoredAt: "2026-08-22T10:00:00Z"
+    }]);
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("commits?per_page=10");
+  });
+
   it("normalizes the configured site URL and rejects unsafe production marker bases", () => {
     expect(normalizeProjectManagerUrl(`${projectManagerUrl}/`)).toBe(projectManagerUrl);
     expect(normalizeProjectManagerUrl("http://127.0.0.1:3000/")).toBe("http://127.0.0.1:3000");

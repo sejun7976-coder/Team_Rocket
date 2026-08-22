@@ -37,7 +37,15 @@ export interface ProjectMember {
   github_error_code: string | null;
   created_at: string;
   added_by: string | null;
-  profile?: Pick<Profile, "id" | "student_id" | "name" | "github_username" | "avatar_url" | "encryption_public_key">;
+  profile?: Pick<
+    Profile,
+    | "id"
+    | "student_id"
+    | "name"
+    | "github_username"
+    | "avatar_url"
+    | "encryption_public_key"
+  >;
 }
 
 export interface Project {
@@ -60,7 +68,11 @@ export interface Project {
   created_at: string;
   updated_at: string;
   project_members?: Array<Pick<ProjectMember, "user_id" | "role">>;
-  tasks?: Array<Pick<Task, "id" | "status"> & { task_assignees?: Array<{ user_id: string }> }>;
+  tasks?: Array<
+    Pick<Task, "id" | "status"> & {
+      task_assignees?: Array<{ user_id: string }>;
+    }
+  >;
 }
 
 export interface TaskAssignee {
@@ -103,6 +115,7 @@ export interface Task {
   task_assignees?: TaskAssignee[];
   task_checklist_items?: ChecklistItem[];
   comments?: Array<{ count: number }>;
+  files?: Array<{ count: number }>;
 }
 
 export interface Comment {
@@ -134,6 +147,7 @@ export interface ProjectFile {
   id: string;
   project_id: string;
   task_id: string | null;
+  folder_id: string | null;
   storage_path: string;
   original_name_encrypted: EncryptionEnvelope;
   filename?: string;
@@ -149,12 +163,31 @@ export interface ProjectFile {
   task?: Pick<Task, "id" | "title"> | null;
 }
 
+export interface FileFolder {
+  id: string;
+  project_id: string;
+  name_encrypted: EncryptionEnvelope;
+  name?: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
   project_id: string | null;
   task_id: string | null;
-  type: "project_added" | "task_assigned" | "task_unassigned" | "mention" | "due_soon";
+  type:
+    | "project_added"
+    | "task_assigned"
+    | "task_unassigned"
+    | "mention"
+    | "due_soon"
+    | "task_updated"
+    | "comment_added"
+    | "file_uploaded"
+    | "overdue";
   title: string;
   read_at: string | null;
   created_at: string;
