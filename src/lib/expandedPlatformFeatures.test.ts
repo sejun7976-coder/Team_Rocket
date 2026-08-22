@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import migration from "../../supabase/migrations/202608220009_ai_registry_user_deletion_task_rpc.sql?raw";
+import triggerMigration from "../../supabase/migrations/202608220010_fix_domain_activity_triggers.sql?raw";
 import aiAssistant from "../../supabase/functions/ai-assistant/index.ts?raw";
 import aiModels from "../../supabase/functions/ai-models/index.ts?raw";
 import adminAI from "../../supabase/functions/admin-ai-settings/index.ts?raw";
@@ -9,6 +10,7 @@ import openai from "../../supabase/functions/_shared/ai/openai.ts?raw";
 import anthropic from "../../supabase/functions/_shared/ai/anthropic.ts?raw";
 import google from "../../supabase/functions/_shared/ai/google.ts?raw";
 import githubStatus from "../../supabase/functions/github-repository-status/index.ts?raw";
+import githubShared from "../../supabase/functions/_shared/github.ts?raw";
 import adminDelete from "../../supabase/functions/admin-delete-user/index.ts?raw";
 import aiPanel from "../components/RocketAIPanel.tsx?raw";
 import appShell from "../components/AppShell.tsx?raw";
@@ -95,8 +97,19 @@ describe("GitHub reconciliation", () => {
   it("distinguishes connected, recoverable, missing and conflict using GitHub truth", () => {
     for (const state of ["connected", "recoverable", "missing", "conflict"]) expect(githubStatus).toContain(`"${state}"`);
     expect(githubStatus).toContain("getRepository");
-    expect(githubStatus).toContain("isRepositoryForProject");
+    expect(githubStatus).toContain("repositoryMarkerStatus");
+    expect(githubStatus).toContain("upgradeRepositoryMarker");
+    expect(githubStatus).toContain("trustedMetadata");
     expect(githubStatus).toContain('rpc("finalize_project_creation"');
+    expect(githubStatus).toContain('status: "not_connected"');
+    expect(githubStatus).toContain('error_code: "GITHUB_REPOSITORY_MISSING"');
+  });
+
+  it("upgrades only the same project's legacy marker and preserves idempotency", () => {
+    expect(githubShared).toContain('marker === "legacy"');
+    expect(githubShared).toContain("upgradeRepositoryMarker(existing.name, input.projectId)");
+    expect(githubShared).toContain('marker !== "canonical"');
+    expect(githubShared).toContain("REPOSITORY_NAME_CONFLICT");
   });
 
   it("is owner-only and refreshes status/project/header after retry", () => {
@@ -107,6 +120,8 @@ describe("GitHub reconciliation", () => {
     expect(projectPages).toContain('project.status === "active" ? "활성"');
     expect(projectPages).toContain('state === "connected"');
     expect(projectPages).toContain('"미연결"');
+    expect(projectPages).toContain('repositoryStatus.data?.status !== "recoverable"');
+    expect(projectPages).toContain("refetchRepositoryStatus()");
   });
 });
 
@@ -155,10 +170,29 @@ describe("atomic task creation diagnostics", () => {
   });
 
   it("maps actionable PostgREST/Postgres codes instead of hiding every failure", () => {
-    for (const code of ["PGRST202", "42883", "42501", "23503", "22007", "22P02"]) expect(taskService).toContain(code);
+    for (const code of ["PGRST202", "42883", "42501", "42703", "23503", "22007", "22P02"]) expect(taskService).toContain(code);
     expect(taskService).toContain("TASK_RPC_NOT_AVAILABLE");
+    expect(taskService).toContain("TASK_SCHEMA_ERROR");
     expect(taskService).toContain("TASK_PERMISSION_DENIED");
     expect(taskService).toContain("INVALID_ASSIGNEE");
     expect(taskService).not.toContain("descriptionEncrypted, error");
+  });
+
+  it("replaces the polymorphic trigger with row-specific functions", () => {
+    expect(triggerMigration).toContain("drop function if exists public.record_domain_activity()");
+    expect(triggerMigration).toContain("execute function public.record_task_activity()");
+    expect(triggerMigration).toContain("execute function public.record_assignee_activity()");
+    expect(triggerMigration).toContain("execute function public.record_comment_activity()");
+    expect(triggerMigration).toContain("execute function public.record_file_activity()");
+    expect(triggerMigration).toContain("v_actor_id := new.created_by");
+    expect(triggerMigration).toContain("values (new.user_id, v_project_id, new.task_id, 'task_assigned'");
+  });
+
+  it("never reads an assignee-only user_id field inside the task trigger", () => {
+    const taskFunction = triggerMigration.match(/create or replace function public\.record_task_activity\(\)[\s\S]*?\$\$;/u)?.[0] ?? "";
+    expect(taskFunction).toContain("new.created_by");
+    expect(taskFunction).not.toMatch(/(?:new|old)\.user_id/u);
+    expect(taskFunction).toContain("insert into public.activities");
+    expect(taskFunction).toContain("insert into public.notifications");
   });
 });

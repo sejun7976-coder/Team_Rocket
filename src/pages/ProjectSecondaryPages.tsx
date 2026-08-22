@@ -96,6 +96,14 @@ export function ProjectGitHubPage() {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const repositoryStatus = useQuery({ queryKey: ["github-repository-status", project.id], queryFn: () => getGitHubRepositoryStatus(project.id), staleTime: 15_000 });
+  const refetchRepositoryStatus = repositoryStatus.refetch;
+  useEffect(() => {
+    if (repositoryStatus.data?.status !== "recoverable" || !repositoryStatus.data.reconciled) return;
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["project", project.id] }),
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+    ]).then(() => refetchRepositoryStatus());
+  }, [project.id, queryClient, refetchRepositoryStatus, repositoryStatus.data?.reconciled, repositoryStatus.data?.status]);
   const retry = useMutation({
     mutationFn: () => retryGitHubRepositoryCreation(project.id),
     onSuccess: async () => {
@@ -108,14 +116,15 @@ export function ProjectGitHubPage() {
   });
   if (project.created_by !== user?.id) return <Navigate to={`/projects/${project.id}`} replace />;
   const state = repositoryStatus.data?.status ?? (project.github_repository_url ? "connected" : "missing");
-  const status = state === "connected" ? "연결됨" : state === "recoverable" ? "연결 복구됨" : state === "conflict" ? "이름 충돌" : "미연결";
+  const status = state === "connected" ? "연결됨" : state === "recoverable" ? "연결 복구됨" : state === "conflict" ? "확인 필요" : "미연결";
   const refresh = async () => {
     const result = await repositoryStatus.refetch();
     if (result.data?.status === "missing") retry.mutate();
     await Promise.all([queryClient.invalidateQueries({ queryKey: ["project", project.id] }), queryClient.invalidateQueries({ queryKey: ["projects"] })]);
   };
   const repositoryUrl = repositoryStatus.data?.repositoryUrl ?? project.github_repository_url;
-  return <div className="page-wrap"><PageHeader eyebrow="Integration" title="GitHub Repository" description="프로젝트 활성 상태와 GitHub 연결 상태는 서로 독립적으로 표시됩니다." /><div className="panel max-w-3xl p-6"><div className="flex items-start justify-between gap-4"><div className="flex gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-surface"><Github /></div><div><h2 className="font-extrabold text-ink">{project.github_owner ? `${project.github_owner}/${project.github_repository_name}` : project.github_repository_name}</h2><p className="mt-1 text-sm text-muted">{project.visibility === "private" ? "Private Repository" : "Public Repository"}</p><div className="mt-2 flex gap-2"><Badge tone={project.status === "active" ? "green" : "amber"}>프로젝트 {project.status === "active" ? "활성" : project.status}</Badge><Badge tone={state === "connected" || state === "recoverable" ? "green" : state === "conflict" ? "red" : "amber"}>GitHub {status}</Badge></div></div></div></div>{repositoryStatus.data?.reconciled && <Alert tone="success" className="mt-5">GitHub marker가 일치해 DB 연결 메타데이터를 복구했습니다.</Alert>}{state === "conflict" && <Alert className="mt-5">같은 이름의 Repository가 있지만 이 프로젝트 marker와 일치하지 않습니다.</Alert>}{project.github_error_code && <Alert className="mt-5">{project.github_error_code}</Alert>}{(retry.error || repositoryStatus.error) && <Alert className="mt-5">{retry.error?.message ?? repositoryStatus.error?.message}</Alert>}<div className="mt-6 flex flex-wrap gap-2">{repositoryUrl && <a href={repositoryUrl} target="_blank" rel="noopener noreferrer"><Button><ExternalLink size={16} /> GitHub에서 열기</Button></a>}<Button variant="secondary" disabled={retry.isPending || repositoryStatus.isFetching} onClick={() => void refresh()}><RefreshCw className={retry.isPending || repositoryStatus.isFetching ? "animate-spin" : ""} size={16} /> {state === "missing" ? "Repository 생성 재시도" : "실제 상태 확인"}</Button></div></div></div>;
+  const actionLabel = state === "missing" ? "Repository 생성" : state === "recoverable" ? "Repository 연결 복구" : state === "conflict" ? "Repository 확인 필요" : "실제 상태 확인";
+  return <div className="page-wrap"><PageHeader eyebrow="Integration" title="GitHub Repository" description="프로젝트 활성 상태와 GitHub 연결 상태는 서로 독립적으로 표시됩니다." /><div className="panel max-w-3xl p-6"><div className="flex items-start justify-between gap-4"><div className="flex gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-surface"><Github /></div><div><h2 className="font-extrabold text-ink">{project.github_owner ? `${project.github_owner}/${project.github_repository_name}` : project.github_repository_name}</h2><p className="mt-1 text-sm text-muted">{project.visibility === "private" ? "Private Repository" : "Public Repository"}</p><div className="mt-2 flex gap-2"><Badge tone={project.status === "active" ? "green" : "amber"}>프로젝트 {project.status === "active" ? "활성" : project.status}</Badge><Badge tone={state === "connected" || state === "recoverable" ? "green" : state === "conflict" ? "red" : "amber"}>GitHub {status}</Badge></div></div></div></div>{repositoryStatus.data?.reconciled && <Alert tone="success" className="mt-5">Repository marker와 DB 연결 메타데이터를 복구했습니다.</Alert>}{state === "conflict" && <Alert className="mt-5">Repository는 존재하지만 marker가 없거나 이 Project UUID와 일치하지 않아 자동 연결하지 않았습니다.</Alert>}{project.github_error_code && <Alert className="mt-5">{project.github_error_code}</Alert>}{(retry.error || repositoryStatus.error) && <Alert className="mt-5">{retry.error?.message ?? repositoryStatus.error?.message}</Alert>}<div className="mt-6 flex flex-wrap gap-2">{repositoryUrl && <a href={repositoryUrl} target="_blank" rel="noopener noreferrer"><Button><ExternalLink size={16} /> GitHub에서 열기</Button></a>}<Button variant="secondary" disabled={retry.isPending || repositoryStatus.isFetching} onClick={() => void refresh()}><RefreshCw className={retry.isPending || repositoryStatus.isFetching ? "animate-spin" : ""} size={16} /> {actionLabel}</Button></div></div></div>;
 }
 
 export function ProjectSettingsPage() {

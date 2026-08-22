@@ -3,8 +3,10 @@ import {
   GitHubClient,
   GitHubClientError,
   isRepositoryForProject,
+  legacyProjectRepositoryMarker,
   normalizeProjectManagerUrl,
-  projectRepositoryMarker
+  projectRepositoryMarker,
+  repositoryMarkerStatus
 } from "../../supabase/functions/_shared/githubClient.ts";
 
 const projectId = "10000000-0000-4000-8000-000000000001";
@@ -85,11 +87,52 @@ describe("GitHub Repository client", () => {
     });
   });
 
+  it("returns null only for an actual repository 404", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
+    const client = new GitHubClient({ token: fakeToken, owner, ownerType: "user", projectManagerUrl }, fetcher);
+
+    await expect(client.getRepository("missing-repository")).resolves.toBeNull();
+  });
+
+  it("keeps repository permission failures distinct from missing repositories", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 403 }));
+    const client = new GitHubClient({ token: fakeToken, owner, ownerType: "user", projectManagerUrl }, fetcher);
+
+    await expect(client.getRepository("private-repository")).rejects.toMatchObject({
+      status: 502,
+      code: "GITHUB_PERMISSION_DENIED"
+    });
+  });
+
   it("recognizes only repositories carrying the matching project idempotency marker", () => {
     const matching = repository();
     const different = repository({ homepage: projectRepositoryMarker(projectManagerUrl, "20000000-0000-4000-8000-000000000001") });
     expect(isRepositoryForProject(matching as never, projectId, projectManagerUrl)).toBe(true);
     expect(isRepositoryForProject(different as never, projectId, projectManagerUrl)).toBe(false);
+  });
+
+  it("classifies canonical, same-project legacy, missing, and mismatched markers without cross-project claiming", () => {
+    const otherProjectId = "20000000-0000-4000-8000-000000000001";
+    expect(repositoryMarkerStatus(repository() as never, projectId, projectManagerUrl)).toBe("canonical");
+    expect(repositoryMarkerStatus(repository({ homepage: legacyProjectRepositoryMarker(projectId) }) as never, projectId, projectManagerUrl)).toBe("legacy");
+    expect(repositoryMarkerStatus(repository({ homepage: null }) as never, projectId, projectManagerUrl)).toBe("missing");
+    expect(repositoryMarkerStatus(repository({ homepage: legacyProjectRepositoryMarker(otherProjectId) }) as never, projectId, projectManagerUrl)).toBe("mismatch");
+  });
+
+  it("patches a legacy homepage to the canonical project marker", async () => {
+    const canonical = projectRepositoryMarker(projectManagerUrl, projectId);
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify(repository({ homepage: payload.homepage })), { status: 200 });
+    });
+    const client = new GitHubClient({ token: fakeToken, owner, ownerType: "user", projectManagerUrl }, fetcher);
+
+    const upgraded = await client.setRepositoryHomepage("ai-pilot", canonical);
+
+    expect(upgraded.homepage).toBe(canonical);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(`https://api.github.com/repos/${owner}/ai-pilot`);
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe("PATCH");
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ homepage: canonical });
   });
 
   it("maps GitHub rate-limit responses to a stable safe error code", async () => {

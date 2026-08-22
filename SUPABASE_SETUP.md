@@ -20,6 +20,9 @@ Migration은 반드시 순서대로 적용한다.
 5. `202608220005_recoverable_system_admin_bootstrap.sql`: partial bootstrap 상태 판별, 기존 Auth UUID 재사용, recovery finalize와 안전한 오류 코드
 6. `202608220006_idempotent_first_login.sql`: service-role 전용 최초 로그인 finalize RPC, profile/keyring 원자적 저장과 재시도 복구
 7. `202608220007_admin_project_access_logs.sql`: system_admin 전용 프로젝트 생성 DB 방어, 90일 접속 로그, Auth Audit Log 관리자 RPC
+8. `202608220008_task_atomic_and_ai.sql`: 암호화 작업 생성 RPC와 초기 AI 설정
+9. `202608220009_ai_registry_user_deletion_task_rpc.sql`: multi-provider AI registry, 사용자 완전 삭제 지원, task RPC 재게시
+10. `202608220010_fix_domain_activity_triggers.sql`: table별 활동 trigger 분리, `tasks` row에 없는 `user_id` 참조 제거
 
 SQL Editor에서 table을 수동 생성하지 않는다.
 
@@ -218,6 +221,8 @@ npx supabase test db
 - 비밀번호 변경 완료 멤버의 접근 허용
 - 비멤버가 이미 알고 있는 UUID로 profiles, projects, members, keys, tasks, assignees, checklist, comments, activities, files, notifications, GitHub jobs를 조회하거나 변경하려는 공격 차단
 - stale JWT를 가진 비활성 사용자의 접근 차단
+
+`supabase/tests/task_trigger_regression.sql`은 실제 `create_task_atomic` 호출로 0/1/2명 담당자, NULL/유효 마감일, 중복·비멤버 담당자, activity/notification trigger 동작과 원자적 rollback을 검증한다.
 
 ## 8. Frontend 환경 변수
 

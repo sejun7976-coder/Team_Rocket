@@ -54,7 +54,7 @@ export interface CreateTaskInput {
   assigneeIds?: string[] | undefined;
 }
 
-export type TaskServiceErrorCode = "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_RPC_NOT_AVAILABLE" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED";
+export type TaskServiceErrorCode = "TASK_PERMISSION_DENIED" | "INVALID_ASSIGNEE" | "TASK_INPUT_INVALID" | "TASK_RPC_NOT_AVAILABLE" | "TASK_SCHEMA_ERROR" | "TASK_CREATE_FAILED" | "PROJECT_KEY_LOCKED";
 export class TaskServiceError extends Error {
   constructor(public readonly code: TaskServiceErrorCode, message: string, public readonly databaseCode?: string) {
     super(message);
@@ -75,6 +75,7 @@ function taskRpcError(error: { code?: string; message?: string } | null): TaskSe
     return new TaskServiceError("TASK_INPUT_INVALID", "작업 입력값을 확인해 주세요.");
   }
   if (code === "PGRST202" || code === "42883") return new TaskServiceError("TASK_RPC_NOT_AVAILABLE", "작업 생성 RPC가 API schema cache에 없습니다. migration 009 적용 상태를 확인해 주세요. (TASK_RPC_NOT_AVAILABLE)", code);
+  if (code === "42703") return new TaskServiceError("TASK_SCHEMA_ERROR", "작업 저장 과정의 서버 데이터 구조가 올바르지 않습니다. (TASK_SCHEMA_ERROR)", code);
   const safeCode = code && /^[A-Z0-9]{2,12}$/u.test(code) ? code : "UNKNOWN";
   return new TaskServiceError("TASK_CREATE_FAILED", `작업을 생성할 수 없습니다. (TASK_CREATE_FAILED/${safeCode})`, safeCode);
 }

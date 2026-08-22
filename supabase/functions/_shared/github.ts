@@ -4,7 +4,9 @@ import {
   GitHubClientError,
   type GitHubConfiguration,
   type GitHubRepository,
-  isRepositoryForProject as matchesProjectRepository
+  isRepositoryForProject as matchesProjectRepository,
+  repositoryMarkerStatus as resolveRepositoryMarkerStatus,
+  type RepositoryMarkerStatus
 } from "./githubClient.ts";
 import {
   GitHubConfigurationError,
@@ -62,6 +64,15 @@ export function isRepositoryForProject(repository: GitHubRepository, projectId: 
   return matchesProjectRepository(repository, projectId, configuration().projectManagerUrl);
 }
 
+export function repositoryMarkerStatus(repository: GitHubRepository, projectId: string): RepositoryMarkerStatus {
+  return resolveRepositoryMarkerStatus(repository, projectId, configuration().projectManagerUrl);
+}
+
+export async function upgradeRepositoryMarker(repositoryName: string, projectId: string): Promise<GitHubRepository> {
+  const resolved = configuration();
+  return await translate((client) => client.setRepositoryHomepage(repositoryName, `${resolved.projectManagerUrl}/#/projects/${projectId}`));
+}
+
 export function configuredOwner(): string {
   return configuration().owner;
 }
@@ -91,7 +102,9 @@ export async function ensureProjectRepository(input: {
 }): Promise<GitHubRepository> {
   const existing = await getRepository(input.name);
   if (existing) {
-    if (!isRepositoryForProject(existing, input.projectId)) {
+    const marker = repositoryMarkerStatus(existing, input.projectId);
+    if (marker === "legacy") return await upgradeRepositoryMarker(existing.name, input.projectId);
+    if (marker !== "canonical") {
       throw new ApiError(409, "REPOSITORY_NAME_CONFLICT", "이미 존재하는 Repository 이름입니다.");
     }
     return existing;
@@ -101,7 +114,11 @@ export async function ensureProjectRepository(input: {
   } catch (error) {
     if (!(error instanceof ApiError) || error.code !== "REPOSITORY_NAME_CONFLICT") throw error;
     const raced = await getRepository(input.name);
-    if (raced && isRepositoryForProject(raced, input.projectId)) return raced;
+    if (raced) {
+      const marker = repositoryMarkerStatus(raced, input.projectId);
+      if (marker === "legacy") return await upgradeRepositoryMarker(raced.name, input.projectId);
+      if (marker === "canonical") return raced;
+    }
     throw error;
   }
 }

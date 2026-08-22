@@ -93,6 +93,18 @@ export function projectRepositoryMarker(projectManagerUrl: string, projectId: st
   return `${projectManagerUrl}/#/projects/${projectId}`;
 }
 
+export function legacyProjectRepositoryMarker(projectId: string): string {
+  return `https://rocket-campus.invalid/projects/${projectId}`;
+}
+
+export type RepositoryMarkerStatus = "canonical" | "legacy" | "missing" | "mismatch";
+export function repositoryMarkerStatus(repository: GitHubRepository, projectId: string, projectManagerUrl: string): RepositoryMarkerStatus {
+  if (repository.homepage === projectRepositoryMarker(projectManagerUrl, projectId)) return "canonical";
+  if (repository.homepage === legacyProjectRepositoryMarker(projectId)) return "legacy";
+  if (!repository.homepage?.trim()) return "missing";
+  return "mismatch";
+}
+
 export function isRepositoryForProject(repository: GitHubRepository, projectId: string, projectManagerUrl: string): boolean {
   return repository.homepage === projectRepositoryMarker(projectManagerUrl, projectId);
 }
@@ -155,6 +167,17 @@ export class GitHubClient {
   async getRepository(name: string): Promise<GitHubRepository | null> {
     const response = await this.request(`/repos/${encodeURIComponent(this.configuration.owner)}/${encodeURIComponent(name)}`);
     if (response.status === 404) return null;
+    if (!response.ok) throw responseError(response);
+    const repository = parseRepository(await this.json(response));
+    this.assertRepositoryOwner(repository);
+    return repository;
+  }
+
+  async setRepositoryHomepage(name: string, homepage: string): Promise<GitHubRepository> {
+    const response = await this.request(
+      `/repos/${encodeURIComponent(this.configuration.owner)}/${encodeURIComponent(name)}`,
+      { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ homepage }) }
+    );
     if (!response.ok) throw responseError(response);
     const repository = parseRepository(await this.json(response));
     this.assertRepositoryOwner(repository);
