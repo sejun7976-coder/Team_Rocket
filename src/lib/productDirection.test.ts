@@ -42,11 +42,14 @@ describe("Team Rocket product direction", () => {
   });
 
   it("turns Overview into a project dashboard", () => {
-    for (const label of ["프로젝트 진행률", "전체 작업", "내 작업", "마감 임박", "최근 활동", "팀 현황"]) {
+    for (const label of ["공지사항", "프로젝트 진행률", "전체 작업", "내 작업", "마감 임박", "최근 활동"]) {
       expect(projectPages).toContain(label);
     }
+    expect(projectPages).toContain("ProjectAnnouncementCard");
+    expect(projectPages).not.toContain('<h2 className="font-extrabold text-ink">팀원</h2>');
+    expect(projectPages).not.toContain('<h2 className="font-extrabold text-ink">팀 현황</h2>');
     expect(projectPages).toContain("overdue");
-    expect(projectPages).toContain("listActivities");
+    expect(projectPages).toContain("listProjectActivities");
     expect(projectPages).toContain("task_assignees");
   });
 

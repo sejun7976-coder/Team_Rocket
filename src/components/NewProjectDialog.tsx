@@ -2,16 +2,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Github, Lock, Plus, Users } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { isSystemAdmin } from "../lib/authPolicy";
 import { repositorySlug } from "../lib/utils";
+import { usePermissions } from "../hooks/usePermissions";
+import { ADMIN_PERMISSIONS } from "../../supabase/functions/_shared/adminPermissions";
 import { createProject } from "../services/projects";
-import { useAuthStore } from "../stores/authStore";
-import { Alert, Button, Input, Modal, Spinner } from "./ui";
+import { Alert, Button, Input, Modal, Spinner, useToast } from "./ui";
 
 export function NewProjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const user = useAuthStore((state) => state.user);
-  const profile = useAuthStore((state) => state.profile);
-  const admin = isSystemAdmin(user, profile);
+  const permissions = usePermissions();
+  const canCreate = permissions.has(ADMIN_PERMISSIONS.PROJECTS_CREATE);
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
@@ -21,33 +21,46 @@ export function NewProjectDialog({ open, onClose }: { open: boolean; onClose: ()
   const [repositoryEdited, setRepositoryEdited] = useState(false);
   const [visibility, setVisibility] = useState<"private" | "public">("private");
 
+  const reset = () => {
+    setName("");
+    setDescription("");
+    setCreateRepository(false);
+    setRepositoryName("");
+    setRepositoryEdited(false);
+    setVisibility("private");
+  };
+
   useEffect(() => {
     if (!repositoryEdited) setRepositoryName(repositorySlug(name));
   }, [name, repositoryEdited]);
 
   const mutation = useMutation({
     mutationFn: (input: Parameters<typeof createProject>[0]) => {
-      if (!admin) throw new Error("시스템 관리자만 프로젝트를 생성할 수 있습니다.");
+      if (!canCreate) throw new Error("프로젝트를 생성할 권한이 없습니다.");
       return createProject(input);
     },
     onSuccess: async (project) => {
-      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.setQueryData(["project", project.id], project);
+      reset();
+      mutation.reset();
       onClose();
+      showToast("프로젝트가 생성되었습니다.", { tone: "success", dedupeKey: `project-created:${project.id}` });
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
       navigate(`/projects/${project.id}`);
     },
+    onError: () => showToast("프로젝트를 생성하지 못했습니다.", { tone: "error" }),
   });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!admin) return;
+    if (!canCreate) return;
     mutation.mutate({ name, description: description || undefined, createRepository, repositoryName, visibility });
   };
 
-  if (!admin || !open) return null;
+  if (!canCreate || !open) return null;
   return (
     <Modal open={open} onClose={onClose} title="새 프로젝트" description="팀 업무 공간을 먼저 만들고 GitHub 연동은 선택할 수 있습니다." className="max-w-xl">
       <form onSubmit={submit} className="space-y-4">
-        {mutation.error && <Alert>{mutation.error.message}</Alert>}
         <div><label className="label" htmlFor="project-name">프로젝트 이름</label><Input id="project-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="캡스톤 디자인" maxLength={120} required autoFocus /></div>
         <div><label className="label" htmlFor="project-description">설명</label><textarea id="project-description" className="field min-h-24 resize-y" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} placeholder="프로젝트 목표와 범위를 적어주세요." /></div>
         <label className="flex items-center justify-between rounded-xl border border-line bg-raised p-3">

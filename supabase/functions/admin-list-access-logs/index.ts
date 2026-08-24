@@ -1,5 +1,6 @@
 import { describeUserAgent, isAccessEventType, type AccessEventType } from "../_shared/accessLog.ts";
-import { requireSystemAdmin } from "../_shared/auth.ts";
+import { requirePermission, requireReadyUser } from "../_shared/auth.ts";
+import { ADMIN_PERMISSIONS } from "../_shared/adminPermissions.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
 import { requireUuid } from "../_shared/validation.ts";
 
@@ -53,7 +54,8 @@ function normalizedEvent(eventType: string): AccessEventType | null {
 }
 
 serve(async (request) => {
-  const { user: actor, admin } = await requireSystemAdmin(request);
+  const context = await requireReadyUser(request);
+  const { user: actor, admin } = await requirePermission(context, ADMIN_PERMISSIONS.ACCESS_LOGS_VIEW);
   const body = await readJson<RequestBody>(request, 4_096);
   const userId = requireUuid(body.userId, "User ID");
   const eventType = body.eventType === undefined || body.eventType === null || body.eventType === ""

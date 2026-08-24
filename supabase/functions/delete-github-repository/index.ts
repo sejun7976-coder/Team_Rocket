@@ -1,4 +1,5 @@
-import { requireReadyUser } from "../_shared/auth.ts";
+import { requirePermission, requireReadyUser } from "../_shared/auth.ts";
+import { ADMIN_PERMISSIONS } from "../_shared/adminPermissions.ts";
 import { deleteRepository, getRepository, isRepositoryForProject } from "../_shared/github.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
 import { requireText, requireUuid } from "../_shared/validation.ts";
@@ -19,7 +20,8 @@ async function listStoragePaths(admin: Awaited<ReturnType<typeof requireReadyUse
 }
 
 serve(async (request) => {
-  const { user, admin } = await requireReadyUser(request);
+  const context = await requireReadyUser(request);
+  const { user, admin } = await requirePermission(context, ADMIN_PERMISSIONS.PROJECTS_DELETE);
   const body = await readJson<{ projectId?: unknown; confirmation?: unknown }>(request);
   const projectId = requireUuid(body.projectId, "Project ID");
   const confirmation = requireText(body.confirmation, "확인 문구", 1, 120);

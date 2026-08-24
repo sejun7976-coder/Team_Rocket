@@ -1,4 +1,5 @@
-import { requireSystemAdmin } from "../_shared/auth.ts";
+import { requirePermission, requireReadyUser } from "../_shared/auth.ts";
+import { ADMIN_PERMISSIONS } from "../_shared/adminPermissions.ts";
 import { deriveInitialAuthCredential } from "../_shared/authCredential.ts";
 import { INITIAL_PASSWORD, normalizeStudentId, studentIdToInternalEmail } from "../_shared/identity.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
@@ -11,7 +12,8 @@ interface RequestBody {
 }
 
 serve(async (request) => {
-  const { user: actor, admin } = await requireSystemAdmin(request);
+  const context = await requireReadyUser(request);
+  const { user: actor, admin } = await requirePermission(context, ADMIN_PERMISSIONS.USERS_CREATE);
   const body = await readJson<RequestBody>(request);
   const studentId = normalizeStudentId(body.studentId);
   const name = requireText(body.name, "이름", 1, 80);
@@ -52,6 +54,18 @@ serve(async (request) => {
   if (profileError || !profile) {
     await admin.auth.admin.deleteUser(authUser.id);
     throw new ApiError(500, "PROFILE_CREATE_FAILED", "프로필 생성에 실패하여 Auth 계정을 되돌렸습니다.");
+  }
+
+  const { error: defaultPermissionError } = await admin
+    .from("user_admin_permissions")
+    .insert({
+      user_id: authUser.id,
+      permission: ADMIN_PERMISSIONS.AI_USE,
+      created_by: actor.id,
+    });
+  if (defaultPermissionError && defaultPermissionError.code !== "23505") {
+    await admin.auth.admin.deleteUser(authUser.id);
+    throw new ApiError(500, "DEFAULT_PERMISSION_FAILED", "기본 기능 권한을 설정하지 못해 사용자 생성을 되돌렸습니다.");
   }
 
   await admin.from("admin_audit_logs").insert({

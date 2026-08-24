@@ -94,16 +94,20 @@ describe("GitHub reconciliation", () => {
 describe("admin account deletion", () => {
   it("uses a compact responsive row with a secondary action menu", () => {
     expect(adminPages).not.toContain('min-w-[1500px]');
-    expect(adminPages).toContain("<details");
+    expect(adminPages).toContain("<Popover");
+    expect(adminPages).toContain('role="menu"');
     expect(adminPages).toContain("완전 삭제");
     expect(adminPages).toContain("grid-cols-[minmax(0,1fr)_auto]");
   });
 
-  it("rejects self, system admins and project owners", () => {
+  it("requires users.delete and rejects self, system admins, project owners, and the last permission manager", () => {
     expect(adminDelete).toContain("CANNOT_DELETE_SELF");
     expect(adminDelete).toContain("SYSTEM_ADMIN_PROTECTED");
     expect(adminDelete).toContain("USER_OWNS_PROJECTS");
-    expect(adminDelete).toContain("requireSystemAdmin(request)");
+    expect(adminDelete).toContain("ADMIN_PERMISSIONS.USERS_DELETE");
+    expect(adminDelete).toContain("requirePermission(context");
+    expect(adminDelete).toContain("LAST_PERMISSION_MANAGER");
+    expect(adminDelete).not.toContain("requireSystemAdmin(request)");
   });
 
   it("removes collaborators before Auth and preserves audit snapshots", () => {

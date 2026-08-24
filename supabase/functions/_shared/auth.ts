@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2";
 import { ApiError } from "./http.ts";
 import { canAccessManagedBusinessData, canActAsSystemAdmin } from "./accountPolicy.ts";
+import type { Permission } from "./adminPermissions.ts";
 
 export interface AuthContext {
   user: User;
@@ -61,5 +62,24 @@ export async function requireSystemAdmin(request: Request): Promise<AuthContext>
   if (!canActAsSystemAdmin(profile.system_role, profile.account_status, context.user.app_metadata)) {
     throw new ApiError(403, "SYSTEM_ADMIN_REQUIRED", "시스템 관리자 권한이 필요합니다.");
   }
+  return context;
+}
+
+export async function requirePermission(
+  context: AuthContext,
+  permission: Permission,
+): Promise<AuthContext> {
+  const profile = await managedProfile(context);
+  if (!canAccessManagedBusinessData(profile.account_status, context.user.app_metadata)) {
+    throw new ApiError(403, "ACCOUNT_NOT_READY", "활성 계정만 이 기능을 사용할 수 있습니다.");
+  }
+  const { data, error } = await context.admin
+    .from("user_admin_permissions")
+    .select("permission")
+    .eq("user_id", context.user.id)
+    .eq("permission", permission)
+    .maybeSingle();
+  if (error) throw new ApiError(500, "PERMISSION_CHECK_FAILED", "사용자 권한을 확인할 수 없습니다.");
+  if (!data) throw new ApiError(403, "PERMISSION_REQUIRED", "이 작업을 수행할 권한이 없습니다.");
   return context;
 }

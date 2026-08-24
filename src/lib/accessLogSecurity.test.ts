@@ -3,14 +3,20 @@ import { accessMetadataFromRequest, describeUserAgent } from "../../supabase/fun
 import adminListSource from "../../supabase/functions/admin-list-access-logs/index.ts?raw";
 import recordSource from "../../supabase/functions/record-access-event/index.ts?raw";
 import migrationSql from "../../supabase/migrations/202608220007_admin_project_access_logs.sql?raw";
+import permissionMigrationSql from "../../supabase/migrations/202608250002_general_permissions_and_ai_models.sql?raw";
 
 describe("access-log security", () => {
-  it("requires system admin for reads and exposes no browser table access", () => {
-    expect(adminListSource).toContain("requireSystemAdmin(request)");
+  it("requires the access-log capability for reads and exposes no browser table access", () => {
+    expect(adminListSource).toContain("await requireReadyUser(request)");
+    expect(adminListSource).toContain("ADMIN_PERMISSIONS.ACCESS_LOGS_VIEW");
+    expect(adminListSource).toContain("requirePermission(context");
+    expect(adminListSource).not.toContain("requireSystemAdmin(request)");
     expect(migrationSql).toContain("alter table public.user_access_logs enable row level security");
     expect(migrationSql).toContain("revoke all privileges on table public.user_access_logs from public, anon, authenticated");
-    expect(migrationSql).toContain("p_actor_id");
-    expect(migrationSql).toContain("system_role = 'admin'");
+    expect(permissionMigrationSql).toContain("permission = 'access_logs.view'");
+    expect(permissionMigrationSql).toContain("permission = 'users.view'");
+    const auditOverrides = permissionMigrationSql.slice(permissionMigrationSql.indexOf("create or replace function public.list_auth_audit_logs_admin"));
+    expect(auditOverrides).not.toContain("system_role = 'admin'");
   });
 
   it("ignores spoofed IP/country/user-agent JSON fields and uses gateway headers", () => {

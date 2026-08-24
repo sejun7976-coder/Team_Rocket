@@ -4,13 +4,18 @@ import type { Activity, Notification } from "../types/domain";
 export async function listActivities(projectId?: string): Promise<Activity[]> {
   let query = supabase
     .from("activities")
-    .select("*, actor:profiles!activities_actor_id_fkey(id, name, avatar_url)")
+    .select("*, actor:profiles!activities_actor_id_fkey(id, name, avatar_url), project:projects!activities_project_id_fkey(id, name)")
     .order("created_at", { ascending: false })
     .limit(100);
   if (projectId) query = query.eq("project_id", projectId);
   const { data, error } = await query;
   if (error) throw new Error("활동 기록을 불러올 수 없습니다.");
   return (data ?? []) as unknown as Activity[];
+}
+
+export async function listProjectActivities(projectId: string): Promise<Activity[]> {
+  if (!projectId.trim()) throw new Error("프로젝트 ID가 필요합니다.");
+  return listActivities(projectId);
 }
 
 export async function listNotifications(): Promise<Notification[]> {

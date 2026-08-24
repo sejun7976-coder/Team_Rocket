@@ -6,6 +6,7 @@ import {
   MoreVertical,
   Plus,
   Settings2,
+  Shield,
   ShieldCheck,
   Trash2,
   Users,
@@ -19,7 +20,9 @@ import {
   Input,
   Modal,
   PageHeader,
+  Popover,
   Spinner,
+  useToast,
 } from "../components/ui";
 import {
   createAdminUser,
@@ -29,11 +32,21 @@ import {
   listAdminUsers,
   resetAdminUserPassword,
   setAdminUserActive,
+  setUserPermissions,
+  setAdminUserRole,
   type AdminUser,
   type AdminUserStatus,
   type AccessLogEventType,
 } from "../services/admin";
 import { useAuthStore } from "../stores/authStore";
+import type { SystemRole } from "../types/domain";
+import { usePermissions, PERMISSIONS_QUERY_KEY } from "../hooks/usePermissions";
+import {
+  ADMIN_PERMISSIONS,
+  PERMISSION_REGISTRY,
+  type Permission,
+  type PermissionCategory,
+} from "../../supabase/functions/_shared/adminPermissions";
 
 const statusLabels: Record<AdminUserStatus, string> = {
   initial_login_pending: "최초 로그인 전",
@@ -50,6 +63,19 @@ const statusTones: Record<
   password_change_required: "amber",
   active: "green",
   inactive: "red",
+};
+
+const systemRoleLabels: Record<SystemRole, string> = {
+  user: "User",
+  admin: "Admin",
+};
+
+const permissionCategoryLabels: Record<PermissionCategory, string> = {
+  projects: "프로젝트 관리",
+  users: "사용자 관리",
+  permissions: "계정 유형 및 기능 권한",
+  logs: "로그",
+  ai: "AI",
 };
 
 const accessEventLabels: Record<AccessLogEventType, string> = {
@@ -214,6 +240,7 @@ function CreateUserDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [studentId, setStudentId] = useState("");
   const [name, setName] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
@@ -232,8 +259,10 @@ function CreateUserDialog({
       }),
     onSuccess: async (result) => {
       setCreated({ studentId: result.user.student_id, name: result.user.name });
+      showToast("사용자가 생성되었습니다.", { tone: "success", dedupeKey: `user-created:${result.user.id}` });
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
+    onError: () => showToast("사용자를 생성하지 못했습니다.", { tone: "error" }),
   });
   const close = () => {
     setStudentId("");
@@ -285,9 +314,6 @@ function CreateUserDialog({
         </div>
       ) : (
         <form onSubmit={submit}>
-          {mutation.error && (
-            <Alert className="mb-4">{mutation.error.message}</Alert>
-          )}
           <label className="label" htmlFor="admin-student-id">
             학번 *
           </label>
@@ -352,11 +378,14 @@ function ResetPasswordDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const mutation = useMutation({
     mutationFn: () => resetAdminUserPassword(target!.id),
     onSuccess: async () => {
+      showToast("비밀번호가 초기화되었습니다.", { tone: "success" });
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
+    onError: () => showToast("비밀번호를 초기화하지 못했습니다.", { tone: "error" }),
   });
   const close = () => {
     mutation.reset();
@@ -371,7 +400,7 @@ function ResetPasswordDialog({
     >
       {mutation.isSuccess ? (
         <div>
-          <Alert tone="success">
+          <Alert tone="info">
             비밀번호가 1234로 초기화되었습니다. 다음 로그인에서 새 PIN 또는
             비밀번호 설정이 강제됩니다.
           </Alert>
@@ -390,9 +419,6 @@ function ResetPasswordDialog({
             초기 비밀번호는 <strong className="font-mono text-ink">1234</strong>
             가 되며, 기존 세션의 업무 데이터 접근도 DB 정책에서 즉시 차단됩니다.
           </p>
-          {mutation.error && (
-            <Alert className="mt-4">{mutation.error.message}</Alert>
-          )}
           <div className="mt-6 flex justify-end gap-2">
             <Button variant="secondary" onClick={close}>
               취소
@@ -424,14 +450,17 @@ function DeleteUserDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [confirmation, setConfirmation] = useState("");
   useEffect(() => setConfirmation(""), [target?.id]);
   const mutation = useMutation({
     mutationFn: () => deleteAdminUser(target!.id, confirmation.trim()),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      showToast("사용자가 삭제되었습니다.", { tone: "success" });
       onClose();
     },
+    onError: () => showToast("사용자를 삭제하지 못했습니다.", { tone: "error" }),
   });
   return (
     <Modal
@@ -453,9 +482,6 @@ function DeleteUserDialog({
         onChange={(event) => setConfirmation(event.target.value)}
         autoComplete="off"
       />
-      {mutation.error && (
-        <Alert className="mt-4">{mutation.error.message}</Alert>
-      )}
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>
           취소
@@ -474,9 +500,186 @@ function DeleteUserDialog({
   );
 }
 
+function ChangeRoleDialog({
+  target,
+  onClose,
+  onPromoted,
+}: {
+  target: AdminUser | null;
+  onClose: () => void;
+  onPromoted: (target: AdminUser) => void;
+}) {
+  const currentUser = useAuthStore((state) => state.user);
+  const refreshProfile = useAuthStore((state) => state.refreshProfile);
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [role, setRole] = useState<SystemRole>("user");
+  useEffect(() => {
+    setRole(target?.system_role ?? "user");
+  }, [target?.id, target?.system_role]);
+  const mutation = useMutation({
+    mutationFn: (nextRole: SystemRole) => setAdminUserRole(target!.id, nextRole),
+    onSuccess: async (_, nextRole) => {
+      queryClient.setQueryData<AdminUser[]>(["admin-users"], (current) =>
+        current?.map((user) => user.id === target?.id ? { ...user, system_role: nextRole } : user),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      await queryClient.invalidateQueries({ queryKey: PERMISSIONS_QUERY_KEY });
+      if (target?.id === currentUser?.id) await refreshProfile();
+      showToast(`${target?.name ?? "사용자"}님의 계정 유형이 ${systemRoleLabels[nextRole]}으로 변경되었습니다.`, {
+        tone: "success",
+      });
+      onClose();
+      if (target && target.system_role === "user" && nextRole === "admin") {
+        onPromoted({ ...target, system_role: "admin" });
+      }
+    },
+    onError: () => showToast("계정 유형을 변경하지 못했습니다.", { tone: "error" }),
+  });
+  const close = () => {
+    mutation.reset();
+    onClose();
+  };
+  return (
+    <Modal
+      open={Boolean(target)}
+      onClose={close}
+      title="계정 유형 변경"
+      description={`${target?.name ?? "사용자"}님의 관리상 계정 유형을 변경합니다.`}
+    >
+      <Alert tone="info">
+        계정의 기본 분류입니다. 실제로 사용할 수 있는 기능은 기능 권한 설정에서 결정됩니다.
+      </Alert>
+      <label className="label mt-4" htmlFor="admin-system-role">계정 유형</label>
+      <select
+        id="admin-system-role"
+        className="field"
+        value={role}
+        onChange={(event) => setRole(event.target.value as SystemRole)}
+        disabled={mutation.isPending}
+      >
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select>
+      {target?.id === currentUser?.id && target?.system_role === "admin" && role === "user" && (
+        <Alert className="mt-3">계정 유형을 User로 변경해도 현재 기능 권한은 그대로 유지됩니다.</Alert>
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={close} disabled={mutation.isPending}>취소</Button>
+        <Button
+          onClick={() => mutation.mutate(role)}
+          disabled={mutation.isPending || role === target?.system_role}
+        >
+          {mutation.isPending ? <Spinner className="h-4 w-4" /> : <Shield size={15} />}
+          변경 확인
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function PermissionDialog({
+  target,
+  onClose,
+}: {
+  target: AdminUser | null;
+  onClose: () => void;
+}) {
+  const currentUser = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  useEffect(() => {
+    setPermissions(target?.permissions ?? []);
+  }, [target?.id, target?.permissions]);
+  const mutation = useMutation({
+    mutationFn: () => setUserPermissions(target!.id, permissions),
+    onSuccess: async (saved) => {
+      queryClient.setQueryData<AdminUser[]>(["admin-users"], (current) =>
+        current?.map((user) => user.id === target?.id ? { ...user, permissions: saved } : user),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      if (target?.id === currentUser?.id) {
+        await queryClient.invalidateQueries({ queryKey: PERMISSIONS_QUERY_KEY });
+      }
+      showToast("기능 권한이 변경되었습니다.", { tone: "success" });
+      onClose();
+    },
+    onError: () => showToast("기능 권한을 변경하지 못했습니다.", { tone: "error" }),
+  });
+  const close = () => {
+    mutation.reset();
+    onClose();
+  };
+  const unchanged = [...permissions].sort().join("|")
+    === [...(target?.permissions ?? [])].sort().join("|");
+  return (
+    <Modal
+      open={Boolean(target)}
+      onClose={close}
+      title={`${target?.name ?? "사용자"} 기능 권한 설정`}
+      description="프로젝트 생성·삭제, 사용자 관리 등 이 계정이 실제로 사용할 수 있는 기능을 설정합니다."
+      className="max-w-2xl"
+    >
+      <div className="space-y-5">
+        {(Object.keys(permissionCategoryLabels) as PermissionCategory[]).map((category) => (
+          <fieldset key={category} disabled={mutation.isPending}>
+            <legend className="mb-2 text-sm font-extrabold text-ink">
+              {permissionCategoryLabels[category]}
+            </legend>
+            <div className="space-y-2">
+              {PERMISSION_REGISTRY
+                .filter((definition) => definition.category === category)
+                .filter((definition) => definition.key !== ADMIN_PERMISSIONS.AI_USE)
+                .filter((definition) => definition.key !== ADMIN_PERMISSIONS.AI_LOGS_VIEW || target?.system_role === "admin")
+                .map((definition) => (
+                  <label
+                    key={definition.key}
+                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3 hover:bg-raised"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={permissions.includes(definition.key)}
+                      onChange={(event) => setPermissions((current) =>
+                        event.target.checked
+                          ? [...current, definition.key]
+                          : current.filter((permission) => permission !== definition.key),
+                      )}
+                    />
+                    <span>
+                      <span className="block text-sm font-bold text-ink">{definition.label}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted">{definition.description}</span>
+                    </span>
+                  </label>
+                ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="secondary" onClick={close} disabled={mutation.isPending}>취소</Button>
+        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || unchanged}>
+          {mutation.isPending ? <Spinner className="h-4 w-4" /> : <ShieldCheck size={15} />}
+          저장
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
 export function AdminUsersPage() {
   const currentUser = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
+  const permissions = usePermissions();
+  const { showToast } = useToast();
+  const canCreateUser = permissions.has(ADMIN_PERMISSIONS.USERS_CREATE);
+  const canDeleteUser = permissions.has(ADMIN_PERMISSIONS.USERS_DELETE);
+  const canChangeStatus = permissions.has(ADMIN_PERMISSIONS.USERS_CHANGE_STATUS);
+  const canResetPassword = permissions.has(ADMIN_PERMISSIONS.USERS_RESET_PASSWORD);
+  const canChangeRole = permissions.has(ADMIN_PERMISSIONS.USERS_CHANGE_ROLE);
+  const canManagePermissions = permissions.has(ADMIN_PERMISSIONS.USERS_MANAGE_PERMISSIONS);
+  const canViewAccessLogs = permissions.has(ADMIN_PERMISSIONS.ACCESS_LOGS_VIEW);
   const users = useQuery({
     queryKey: ["admin-users"],
     queryFn: listAdminUsers,
@@ -485,12 +688,18 @@ export function AdminUsersPage() {
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
   const [accessTarget, setAccessTarget] = useState<AdminUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [roleTarget, setRoleTarget] = useState<AdminUser | null>(null);
+  const [permissionTarget, setPermissionTarget] = useState<AdminUser | null>(null);
   const statusMutation = useMutation({
     mutationFn: ({ userId, active }: { userId: string; active: boolean }) =>
       setAdminUserActive(userId, active),
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      showToast(variables.active ? "사용자가 재활성화되었습니다." : "사용자가 비활성화되었습니다.", {
+        tone: "success",
+      });
     },
+    onError: () => showToast("사용자 상태를 변경하지 못했습니다.", { tone: "error" }),
   });
   const toggleStatus = (target: AdminUser) => {
     const active = target.status === "inactive";
@@ -508,14 +717,14 @@ export function AdminUsersPage() {
         title="사용자 관리"
         description="사용자 계정과 최근 90일 접속 기록을 관리합니다."
         action={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)} disabled={!canCreateUser}>
             <Plus size={16} /> 사용자 추가
           </Button>
         }
       />
-      {(users.error || statusMutation.error) && (
+      {users.error && (
         <Alert className="mb-4">
-          {users.error?.message ?? statusMutation.error?.message}
+          {users.error.message}
         </Alert>
       )}
       {users.isLoading ? (
@@ -547,7 +756,8 @@ export function AdminUsersPage() {
                     managedUser.system_role === "admin" ? "purple" : "neutral"
                   }
                 >
-                  {managedUser.system_role}
+                  {systemRoleLabels[managedUser.system_role]}
+                  {` · 권한 ${managedUser.permissions.length}개`}
                 </Badge>
               </div>
               <div className="hidden min-w-0 md:block">
@@ -559,55 +769,91 @@ export function AdminUsersPage() {
                   {managedUser.loginCount30Days}회
                 </p>
               </div>
-              <details className="relative justify-self-end">
-                <summary
-                  aria-label={`${managedUser.name} 관리 메뉴`}
-                  title="관리 메뉴"
-                  className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg hover:bg-raised"
+              <div className="justify-self-end">
+                <Popover
+                  label={`${managedUser.name} 관리 메뉴`}
+                  role="menu"
+                  className="w-48 p-1"
+                  trigger={(triggerProps) => (
+                    <button
+                      {...triggerProps}
+                      type="button"
+                      aria-label={`${managedUser.name} 관리 메뉴`}
+                      title="관리 메뉴"
+                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink"
+                    >
+                      <MoreVertical size={17} />
+                    </button>
+                  )}
                 >
-                  <MoreVertical size={17} />
-                </summary>
-                <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-line bg-surface p-1 shadow-lift">
+                  {(close) => (
+                    <>
                   <button
-                    className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised"
-                    onClick={() => setAccessTarget(managedUser)}
+                    role="menuitem"
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised disabled:opacity-40"
+                    disabled={!canViewAccessLogs}
+                    onClick={() => { close(); setAccessTarget(managedUser); }}
                   >
                     접속 기록 보기
                   </button>
                   <button
+                    role="menuitem"
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised disabled:opacity-40"
+                    disabled={!canChangeRole}
+                    onClick={() => { close(); setRoleTarget(managedUser); }}
+                  >
+                    계정 유형 변경
+                  </button>
+                  <button
+                    role="menuitem"
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised disabled:opacity-40"
+                    disabled={!canManagePermissions}
+                    onClick={() => { close(); setPermissionTarget(managedUser); }}
+                  >
+                    기능 권한 설정
+                  </button>
+                  <button
+                    role="menuitem"
                     className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised disabled:opacity-40"
                     disabled={
                       managedUser.id === currentUser?.id ||
-                      managedUser.status === "inactive"
+                      managedUser.status === "inactive" ||
+                      !canResetPassword
                     }
-                    onClick={() => setResetTarget(managedUser)}
+                    onClick={() => { close(); setResetTarget(managedUser); }}
                   >
                     비밀번호 초기화
                   </button>
                   <button
+                    role="menuitem"
                     className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised disabled:opacity-40"
                     disabled={
                       managedUser.id === currentUser?.id ||
-                      statusMutation.isPending
+                      statusMutation.isPending ||
+                      !canChangeStatus
                     }
-                    onClick={() => toggleStatus(managedUser)}
+                    onClick={() => { close(); toggleStatus(managedUser); }}
                   >
                     {managedUser.status === "inactive"
                       ? "재활성화"
                       : "비활성화"}
                   </button>
                   <button
+                    role="menuitem"
                     className="w-full rounded-lg px-3 py-2 text-left text-xs text-red-600 hover:bg-red-500/10 disabled:opacity-40"
                     disabled={
                       managedUser.id === currentUser?.id ||
-                      managedUser.system_role === "admin"
+                      managedUser.system_role === "admin" ||
+                      !canDeleteUser
                     }
-                    onClick={() => setDeleteTarget(managedUser)}
+                    onClick={() => { close(); setDeleteTarget(managedUser); }}
                   >
                     완전 삭제
                   </button>
-                </div>
-              </details>
+                    </>
+                  )}
+                </Popover>
+              </div>
               <div className="col-span-2 flex gap-1 md:hidden">
                 <Badge tone={statusTones[managedUser.status]}>
                   {statusLabels[managedUser.status]}
@@ -617,7 +863,8 @@ export function AdminUsersPage() {
                     managedUser.system_role === "admin" ? "purple" : "neutral"
                   }
                 >
-                  {managedUser.system_role}
+                  {systemRoleLabels[managedUser.system_role]}
+                  {` · 권한 ${managedUser.permissions.length}개`}
                 </Badge>
               </div>
             </article>
@@ -645,6 +892,15 @@ export function AdminUsersPage() {
       <DeleteUserDialog
         target={deleteTarget}
         onClose={() => setDeleteTarget(null)}
+      />
+      <ChangeRoleDialog
+        target={roleTarget}
+        onClose={() => setRoleTarget(null)}
+        onPromoted={setPermissionTarget}
+      />
+      <PermissionDialog
+        target={permissionTarget}
+        onClose={() => setPermissionTarget(null)}
       />
     </div>
   );

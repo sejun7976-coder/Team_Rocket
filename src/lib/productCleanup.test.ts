@@ -4,6 +4,9 @@ import appShell from "../components/AppShell.tsx?raw";
 import adminPages from "../pages/AdminPages.tsx?raw";
 import projectPages from "../pages/ProjectPages.tsx?raw";
 import secondaryPages from "../pages/ProjectSecondaryPages.tsx?raw";
+import aiPanel from "../components/RocketAIPanel.tsx?raw";
+import aiService from "../services/ai.ts?raw";
+import aiChat from "../../supabase/functions/ai-chat/index.ts?raw";
 
 const frontendSources = import.meta.glob<string>(
   ["../**/*.ts", "../**/*.tsx", "!../lib/*.test.ts", "!../test/**"],
@@ -14,24 +17,21 @@ const edgeFunctionSources = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 
-describe("Team Rocket product cleanup", () => {
-  it("removes every AI runtime route, component, request and Edge Function", () => {
+describe("Team Rocket focused product surface", () => {
+  it("adds the current permission-gated AI implementation without reviving provider-specific clients", () => {
     const frontend = Object.values(frontendSources).join("\n");
     const edgePaths = Object.keys(edgeFunctionSources).join("\n");
-    for (const removed of [
-      "RocketAIPanel",
-      "Rocket AI",
-      "ai-assistant",
-      "ai-models",
-      "admin-ai-settings",
-      "modelSettingId",
-    ]) {
-      expect(frontend).not.toContain(removed);
-      expect(edgePaths).not.toContain(removed);
-    }
-    expect(app).not.toContain("admin/ai");
-    expect(appShell).not.toContain("Sparkles");
-    expect(adminPages).not.toContain("AI 설정");
+    expect(frontend).toContain("RocketAIPanel");
+    expect(edgePaths).toContain("ai-chat");
+    expect(edgePaths).toContain("ai-models");
+    expect(edgePaths).toContain("admin-ai-settings");
+    expect(app).toContain("admin/ai");
+    expect(appShell).toContain("RocketAIPanel");
+    expect(aiPanel).toContain("실행 전 확인");
+    expect(aiService).toContain("invokeAuthenticatedFunction");
+    expect(aiChat).toContain("ADMIN_PERMISSIONS.AI_USE");
+    expect(frontend).not.toMatch(/VITE_(?:OPENAI|ANTHROPIC|GOOGLE|AI).*KEY/u);
+    expect(adminPages).not.toContain("OpenAI API Key");
   });
 
   it("uses the final Korean navigation and focused integration copy", () => {

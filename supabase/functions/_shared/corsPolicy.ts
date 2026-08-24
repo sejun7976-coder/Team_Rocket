@@ -1,12 +1,18 @@
 export type CorsHeaderRecord = Record<string, string>;
 
 const PROJECT_HEADERS = ["x-idempotency-key"];
+const DEVELOPMENT_ORIGINS = new Set([
+  "http://127.0.0.1:3000",
+  "http://localhost:3000"
+]);
 
 export function allowedOrigin(requestOrigin: string | null, configuredFrontendUrl: string): string | null {
   if (!requestOrigin) return null;
+  if (DEVELOPMENT_ORIGINS.has(requestOrigin)) return requestOrigin;
   try {
     // Browser Origin에는 path가 없으므로 GitHub Pages 전체 URL도 origin으로 정규화한다.
-    return requestOrigin === new URL(configuredFrontendUrl).origin ? requestOrigin : null;
+    const configuredOrigin = new URL(configuredFrontendUrl).origin;
+    return requestOrigin === configuredOrigin ? requestOrigin : null;
   } catch {
     return null;
   }

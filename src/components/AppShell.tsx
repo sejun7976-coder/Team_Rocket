@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Bell,
+  Bot,
   CalendarDays,
   CheckSquare,
   FolderCog,
@@ -9,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  ScrollText,
   Settings,
   Shield,
   SlidersHorizontal,
@@ -16,8 +18,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { isSystemAdmin } from "../lib/authPolicy";
+import { usePermissions } from "../hooks/usePermissions";
+import { ADMIN_PERMISSIONS } from "../../supabase/functions/_shared/adminPermissions";
 import { cn } from "../lib/utils";
 import { formatRelativeTime } from "../lib/display";
 import {
@@ -34,8 +38,9 @@ import {
 import { getProject } from "../services/projects";
 import { useAuthStore } from "../stores/authStore";
 import { useProjectKeyStore } from "../stores/projectKeyStore";
-import { Avatar, Badge, Button } from "./ui";
+import { Avatar, Badge, Button, Popover } from "./ui";
 import { ThemeCycleButton } from "./ThemeCycleButton";
+import { RocketAIPanel } from "./RocketAIPanel";
 
 const nav = [
   ["/dashboard", "대시보드", LayoutDashboard],
@@ -46,9 +51,11 @@ const nav = [
 ] as const;
 
 const adminNav = [
-  ["/admin/users", "사용자 관리", Users],
-  ["/admin/projects", "프로젝트 관리", FolderCog],
-  ["/admin/system", "시스템 설정", SlidersHorizontal],
+  { to: "/admin/users", label: "사용자 관리", Icon: Users, permission: ADMIN_PERMISSIONS.USERS_VIEW, systemAdminOnly: false },
+  { to: "/admin/projects", label: "프로젝트 관리", Icon: FolderCog, permission: ADMIN_PERMISSIONS.PROJECTS_VIEW, systemAdminOnly: false },
+  { to: "/admin/ai", label: "AI 설정", Icon: Bot, permission: ADMIN_PERMISSIONS.AI_MANAGE, systemAdminOnly: false },
+  { to: "/admin/ai-logs", label: "AI 대화 기록", Icon: ScrollText, permission: ADMIN_PERMISSIONS.AI_LOGS_VIEW, systemAdminOnly: true },
+  { to: "/admin/system", label: "시스템 설정", Icon: SlidersHorizontal, permission: ADMIN_PERMISSIONS.USERS_MANAGE_PERMISSIONS, systemAdminOnly: false },
 ] as const;
 
 function NavigationLink({
@@ -81,11 +88,11 @@ function NavigationLink({
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, profile, logout, lockKeyring } = useAuthStore();
   const admin = isSystemAdmin(user, profile);
+  const permissions = usePermissions();
   const forgetAll = useProjectKeyStore((state) => state.forgetAll);
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const queryClient = useQueryClient();
   const routeProjectId = location.pathname.match(/^\/projects\/([0-9a-f-]{36})(?:\/|$)/iu)?.[1] ?? "";
   const currentProject = useQuery({
@@ -102,9 +109,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     notifications.data?.filter((item) => !item.read_at).length ?? 0;
   const openNotification = async (
     notification: NonNullable<typeof notifications.data>[number],
+    close: () => void,
   ) => {
     if (!notification.read_at) await markNotificationRead(notification.id);
-    setNotificationsOpen(false);
+    close();
     await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     navigate(
       notification.task_id
@@ -169,31 +177,37 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
   const sidebar = (
     <aside className="flex h-full w-[250px] flex-col border-r border-line bg-surface">
-      <div className="flex h-16 items-center gap-3 border-b border-line px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand font-black text-white">
+      <Link
+        to="/dashboard"
+        aria-label="Team Rocket 대시보드"
+        className="flex h-16 items-center gap-3 border-b border-line px-5 transition hover:bg-raised focus-visible:bg-raised"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand font-black text-white">
           R
-        </div>
-        <div>
-          <div className="text-sm font-extrabold tracking-tight text-ink">
+        </span>
+        <span>
+          <span className="block text-sm font-extrabold tracking-tight text-ink">
             Team Rocket
-          </div>
-          <div className="text-[9px] font-bold uppercase tracking-[.16em] text-muted">
+          </span>
+          <span className="block text-[9px] font-bold uppercase tracking-[.16em] text-muted">
             프로젝트 관리
-          </div>
-        </div>
-      </div>
+          </span>
+        </span>
+      </Link>
       <nav className="scrollbar-thin flex-1 space-y-1 overflow-y-auto p-3">
         {nav.map(([to, label, Icon]) => (
           <NavigationLink key={to} to={to} label={label} Icon={Icon} />
         ))}
-        {admin && (
+        {adminNav.some((item) => permissions.has(item.permission) && (!item.systemAdminOnly || admin)) && (
           <div className="mt-5 border-t border-line pt-4">
             <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-black uppercase tracking-[.14em] text-muted">
-              <Shield size={13} /> 관리자
+              <Shield size={13} /> 관리
             </div>
-            {adminNav.map(([to, label, Icon]) => (
-              <NavigationLink key={to} to={to} label={label} Icon={Icon} />
-            ))}
+            {adminNav
+              .filter((item) => permissions.has(item.permission) && (!item.systemAdminOnly || admin))
+              .map(({ to, label, Icon }) => (
+                <NavigationLink key={to} to={to} label={label} Icon={Icon} />
+              ))}
           </div>
         )}
       </nav>
@@ -248,30 +262,42 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Menu size={19} />
             </Button>
-            <div className="hidden min-w-0 text-sm sm:block">
-              <span className="font-extrabold text-ink">Team Rocket</span>
-              {currentProject.data && <span className="ml-2 truncate font-semibold text-muted">/ {currentProject.data.name}</span>}
+            <div className="min-w-0 text-sm">
+              <Link
+                to="/dashboard"
+                aria-label="Team Rocket 대시보드 breadcrumb"
+                className="inline-flex items-center gap-2 rounded-sm font-extrabold text-ink transition hover:text-brand focus-visible:text-brand"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand text-[10px] font-black text-white">R</span>
+                <span>Team Rocket</span>
+              </Link>
+              {currentProject.data && <span className="ml-2 hidden max-w-48 truncate font-semibold text-muted sm:inline-block">/ {currentProject.data.name}</span>}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="relative">
-              <Button
-                variant="ghost"
-                className="relative h-9 w-9 p-0"
-                aria-label={`알림${unread ? ` ${unread}개 읽지 않음` : ""}`}
-                title="알림"
-                aria-expanded={notificationsOpen}
-                onClick={() => setNotificationsOpen((value) => !value)}
-              >
-                <Bell size={18} />
-                {unread > 0 && (
-                  <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
-                    {unread > 99 ? "99+" : unread}
-                  </span>
-                )}
-              </Button>
-              {notificationsOpen && (
-                <div className="absolute right-0 top-11 z-50 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
+            <Popover
+              label="알림"
+              dismissKey={location.pathname}
+              className="w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl shadow-2xl"
+              trigger={(triggerProps) => (
+                <Button
+                  {...triggerProps}
+                  variant="ghost"
+                  className="relative h-9 w-9 p-0"
+                  aria-label={`알림${unread ? ` ${unread}개 읽지 않음` : ""}`}
+                  title="알림"
+                >
+                  <Bell size={18} />
+                  {unread > 0 && (
+                    <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
+                </Button>
+              )}
+            >
+              {(close) => (
+                <>
                   <div className="flex items-center justify-between border-b border-line px-4 py-3">
                     <div>
                       <h2 className="text-sm font-extrabold text-ink">알림</h2>
@@ -283,19 +309,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </div>
                   <div className="max-h-96 divide-y divide-line overflow-y-auto">
                     {notifications.data?.slice(0, 10).map((notification) => (
-                      <button key={notification.id} className={cn("flex w-full gap-3 p-3 text-left hover:bg-raised", !notification.read_at && "bg-brand/[.04]")} onClick={() => void openNotification(notification)}>
+                      <button key={notification.id} className={cn("flex w-full gap-3 p-3 text-left hover:bg-raised", !notification.read_at && "bg-brand/[.04]")} onClick={() => void openNotification(notification, close)}>
                         <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand" />
                         <span className="min-w-0 flex-1"><span className="block text-sm font-semibold leading-5 text-ink">{notification.title}</span><span className="mt-1 block text-[10px] text-muted">{formatRelativeTime(notification.created_at)}</span></span>
                       </button>
                     ))}
                     {!notifications.data?.length && <p className="p-8 text-center text-sm text-muted">알림이 없습니다.<br />새로운 알림이 생기면 여기에 표시됩니다.</p>}
                   </div>
-                  <button className="w-full border-t border-line px-4 py-3 text-xs font-semibold text-brand hover:bg-raised" onClick={() => { setNotificationsOpen(false); navigate("/notifications"); }}>
+                  <button className="w-full border-t border-line px-4 py-3 text-xs font-semibold text-brand hover:bg-raised" onClick={() => { close(); navigate("/notifications"); }}>
                     모든 알림 보기
                   </button>
-                </div>
+                </>
               )}
-            </div>
+            </Popover>
             <ThemeCycleButton className="border-transparent" />
             <div className="ml-2 flex items-center gap-2 border-l border-line pl-3">
               <Avatar
@@ -327,6 +353,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main>{children}</main>
       </div>
+      <RocketAIPanel />
     </div>
   );
 }

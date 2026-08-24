@@ -1,4 +1,6 @@
 import { invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
+import { supabase } from "../lib/supabase";
+import type { Permission } from "../../supabase/functions/_shared/adminPermissions";
 import type { AccountStatus, SystemRole } from "../types/domain";
 
 export type AdminUserStatus = "initial_login_pending" | "password_change_required" | "active" | "inactive";
@@ -20,6 +22,7 @@ export interface AdminUser {
   recentCountryCode: string | null;
   recentDevice: string | null;
   loginCount30Days: number;
+  permissions: Permission[];
 }
 
 export type AccessLogEventType = "login" | "logout" | "password_changed" | "session_refreshed";
@@ -72,6 +75,33 @@ export async function resetAdminUserPassword(userId: string): Promise<{ initialP
 export async function setAdminUserActive(userId: string, active: boolean): Promise<void> {
   await invokeAdmin("admin-set-user-status", { userId, active });
 }
+
+export async function setAdminUserRole(userId: string, role: SystemRole): Promise<void> {
+  await invokeAdmin("admin-set-user-role", { userId, role });
+}
+
+export async function setUserPermissions(
+  userId: string,
+  permissions: Permission[],
+): Promise<Permission[]> {
+  const data = await invokeAdmin<{ permissions: Permission[] }>(
+    "admin-set-user-permissions",
+    { userId, permissions },
+  );
+  return data.permissions;
+}
+
+export async function listMyPermissions(): Promise<Permission[]> {
+  const { data, error } = await supabase
+    .from("user_admin_permissions")
+    .select("permission")
+    .order("permission");
+  if (error) throw new Error("기능 권한을 불러올 수 없습니다.");
+  return (data ?? []).map((row) => row.permission as Permission);
+}
+
+export const setAdminUserPermissions = setUserPermissions;
+export const listMyAdminPermissions = listMyPermissions;
 
 export async function deleteAdminUser(userId: string, confirmation: string): Promise<void> {
   await invokeAdmin("admin-delete-user", { userId, confirmation });

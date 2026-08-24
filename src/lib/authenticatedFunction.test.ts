@@ -2,8 +2,10 @@ import type { FunctionInvokeOptions, Session } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import adminSource from "../services/admin.ts?raw";
 import projectsSource from "../services/projects.ts?raw";
+import tasksSource from "../services/tasks.ts?raw";
 import authStoreSource from "../stores/authStore.ts?raw";
 import accessLogSource from "../services/accessLogs.ts?raw";
+import aiSource from "../services/ai.ts?raw";
 import helperSource from "./authenticatedFunction.ts?raw";
 import {
   AuthenticatedFunctionError,
@@ -172,21 +174,30 @@ describe("authenticated Edge Function invocation", () => {
   });
 
   it("routes every protected application Function through the same helper", () => {
-    const applicationSources = `${adminSource}\n${projectsSource}\n${authStoreSource}\n${accessLogSource}`;
+    const applicationSources = `${adminSource}\n${projectsSource}\n${tasksSource}\n${authStoreSource}\n${accessLogSource}\n${aiSource}`;
     for (const functionName of [
       "admin-create-user",
+      "admin-delete-user",
       "admin-list-users",
       "admin-reset-password",
       "admin-set-user-status",
+      "admin-set-user-role",
+      "admin-set-user-permissions",
       "admin-list-projects",
       "create-project",
       "sync-project-member",
       "remove-project-member",
       "github-retry",
+      "github-repository-status",
       "delete-github-repository",
+      "delete-task",
       "complete-first-login",
       "record-access-event",
-      "admin-list-access-logs"
+      "admin-list-access-logs",
+      "ai-chat",
+      "ai-models",
+      "admin-ai-settings",
+      "admin-ai-logs",
     ]) {
       expect(applicationSources).toContain(`"${functionName}"`);
     }

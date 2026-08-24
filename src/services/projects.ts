@@ -1,9 +1,10 @@
-import { createProjectKey, wrapExistingProjectKey } from "../crypto";
+import { createProjectKey, decryptContent, encryptContent, wrapExistingProjectKey } from "../crypto";
 import { invokeAuthenticatedFunction } from "../lib/authenticatedFunction";
 import { supabase } from "../lib/supabase";
 import type {
   Profile,
   Project,
+  ProjectAnnouncement,
   ProjectMember,
   ProjectRole,
 } from "../types/domain";
@@ -86,6 +87,55 @@ export async function listProjectMembers(
     .order("created_at");
   if (error) throw new Error("팀원 목록을 불러올 수 없습니다.");
   return (data ?? []) as unknown as ProjectMember[];
+}
+
+export async function getProjectAnnouncement(
+  projectId: string,
+): Promise<ProjectAnnouncement | null> {
+  const { data, error } = await supabase
+    .from("project_announcements")
+    .select(
+      "project_id, content_encrypted, updated_by, created_at, updated_at, updater:profiles!project_announcements_updated_by_fkey(id, name, student_id, avatar_url)",
+    )
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (error) throw new Error("프로젝트 공지를 불러올 수 없습니다.");
+  if (!data) return null;
+  const projectKey = await useProjectKeyStore.getState().unlock(projectId);
+  const content = await decryptContent<string>(data.content_encrypted, projectKey, {
+    projectId,
+    entityType: "project-announcement",
+    entityId: projectId,
+  });
+  return { ...(data as unknown as Omit<ProjectAnnouncement, "content">), content };
+}
+
+export async function saveProjectAnnouncement(
+  projectId: string,
+  content: string,
+): Promise<ProjectAnnouncement> {
+  const userId = useAuthStore.getState().user?.id;
+  if (!userId) throw new Error("로그인이 필요합니다.");
+  const normalized = content.trim();
+  if (normalized.length > 5000) throw new Error("공지사항은 5,000자 이내로 작성해 주세요.");
+  const projectKey = await useProjectKeyStore.getState().unlock(projectId);
+  const contentEncrypted = await encryptContent(normalized, projectKey, {
+    projectId,
+    entityType: "project-announcement",
+    entityId: projectId,
+  });
+  const { error } = await supabase.from("project_announcements").upsert(
+    {
+      project_id: projectId,
+      content_encrypted: contentEncrypted,
+      updated_by: userId,
+    },
+    { onConflict: "project_id" },
+  );
+  if (error) throw new Error("프로젝트 공지를 저장할 권한이 없습니다.");
+  const saved = await getProjectAnnouncement(projectId);
+  if (!saved) throw new Error("저장한 프로젝트 공지를 불러올 수 없습니다.");
+  return saved;
 }
 
 export async function searchProfiles(query: string): Promise<Profile[]> {

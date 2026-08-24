@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
-const TABLES = ["projects", "project_members", "tasks", "task_assignees", "task_checklist_items", "comments", "activities", "files", "github_sync_jobs"] as const;
+const TABLES = ["projects", "project_members", "project_announcements", "tasks", "task_assignees", "task_checklist_items", "comments", "activities", "files", "github_sync_jobs"] as const;
 
 export function useProjectRealtime(projectId: string | undefined): void {
   const queryClient = useQueryClient();
@@ -12,7 +12,7 @@ export function useProjectRealtime(projectId: string | undefined): void {
     for (const table of TABLES) {
       const filter = table === "projects"
         ? `id=eq.${projectId}`
-        : ["project_members", "tasks", "activities", "files", "github_sync_jobs"].includes(table)
+        : ["project_members", "project_announcements", "tasks", "activities", "files", "github_sync_jobs"].includes(table)
           ? `project_id=eq.${projectId}`
           : undefined;
       channel = channel.on(

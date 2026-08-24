@@ -1,9 +1,11 @@
-import { requireSystemAdmin } from "../_shared/auth.ts";
+import { requirePermission, requireReadyUser } from "../_shared/auth.ts";
+import { ADMIN_PERMISSIONS } from "../_shared/adminPermissions.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
 import { requireUuid } from "../_shared/validation.ts";
 
 serve(async (request) => {
-  const { user: actor, admin } = await requireSystemAdmin(request);
+  const context = await requireReadyUser(request);
+  const { user: actor, admin } = await requirePermission(context, ADMIN_PERMISSIONS.USERS_CHANGE_STATUS);
   const body = await readJson<{ userId?: unknown; active?: unknown }>(request);
   const userId = requireUuid(body.userId, "User ID");
   if (typeof body.active !== "boolean") throw new ApiError(400, "INVALID_ACTIVE_STATE", "활성 상태가 올바르지 않습니다.");
@@ -12,9 +14,30 @@ serve(async (request) => {
   const { data: authData, error: authReadError } = await admin.auth.admin.getUserById(userId);
   if (authReadError || !authData.user) throw new ApiError(404, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다.");
 
+  const setManagedStatus = async (status: "password_change_required" | "active" | "inactive") => {
+    const { error } = await admin.rpc("set_managed_account_status", {
+      p_actor_id: actor.id,
+      p_target_user_id: userId,
+      p_next_status: status,
+    });
+    if (!error) return;
+    if (error.message.includes("LAST_SYSTEM_ADMIN")) {
+      throw new ApiError(409, "LAST_SYSTEM_ADMIN", "마지막 활성 관리자는 비활성화할 수 없습니다.");
+    }
+    if (error.message.includes("LAST_PERMISSION_MANAGER")) {
+      throw new ApiError(409, "LAST_PERMISSION_MANAGER", "마지막 권한 관리자는 비활성화할 수 없습니다.");
+    }
+    if (error.message.includes("PERMISSION_REQUIRED")) {
+      throw new ApiError(403, "PERMISSION_REQUIRED", "사용자 상태를 변경할 권한이 없습니다.");
+    }
+    if (error.message.includes("USER_NOT_FOUND")) {
+      throw new ApiError(404, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다.");
+    }
+    throw new ApiError(500, "ACCOUNT_STATUS_UPDATE_FAILED", "사용자 상태를 변경할 수 없습니다.");
+  };
+
   if (!body.active) {
-    const { error: profileError } = await admin.from("profiles").update({ account_status: "inactive" }).eq("id", userId);
-    if (profileError) throw new ApiError(500, "DEACTIVATE_FAILED", "사용자를 비활성화할 수 없습니다.");
+    await setManagedStatus("inactive");
     const { error: authError } = await admin.auth.admin.updateUserById(userId, {
       ban_duration: "876000h",
       app_metadata: { ...authData.user.app_metadata, account_active: false }
@@ -27,8 +50,7 @@ serve(async (request) => {
     });
     if (authError) throw new ApiError(502, "AUTH_UNBAN_FAILED", "Auth 계정을 재활성화할 수 없습니다.");
     const nextStatus = authData.user.app_metadata.must_change_password === false ? "active" : "password_change_required";
-    const { error: profileError } = await admin.from("profiles").update({ account_status: nextStatus }).eq("id", userId);
-    if (profileError) throw new ApiError(500, "REACTIVATE_FAILED", "Auth는 활성화되었지만 DB 접근은 계속 차단되어 있습니다. 다시 시도하세요.");
+    await setManagedStatus(nextStatus);
   }
 
   await admin.from("admin_audit_logs").insert({

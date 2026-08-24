@@ -20,14 +20,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MarkdownText } from "../components/MarkdownText";
 import {
-  Alert,
   Avatar,
   Badge,
   Button,
   EmptyState,
   Input,
   Modal,
+  Popover,
   Spinner,
+  useToast,
 } from "../components/ui";
 import { listProjectMembers } from "../services/projects";
 import {
@@ -62,6 +63,7 @@ import { formatBytes } from "../lib/utils";
 
 function TaskAttachments({ task }: { task: Task }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const user = useAuthStore((state) => state.user);
   const files = useQuery({
     queryKey: ["task-files", task.id],
@@ -119,12 +121,11 @@ function TaskAttachments({ task }: { task: Task }) {
       validateProjectFile(file);
       await uploadProjectFile(task.project_id, file, task.id);
       await refresh();
+      showToast("파일이 업로드되었습니다.", { tone: "success" });
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "파일을 업로드할 수 없습니다.",
-      );
+      const message = caught instanceof Error ? caught.message : "파일을 업로드할 수 없습니다.";
+      setError(message);
+      showToast(message, { tone: "error" });
     }
   };
   return (
@@ -198,8 +199,13 @@ function TaskAttachments({ task }: { task: Task }) {
                 title="파일 삭제"
                 onClick={async () => {
                   if (confirm("첨부 파일을 삭제할까요?")) {
-                    await deleteProjectFile(file);
-                    await refresh();
+                    try {
+                      await deleteProjectFile(file);
+                      await refresh();
+                      showToast("파일이 삭제되었습니다.", { tone: "success" });
+                    } catch {
+                      showToast("파일을 삭제하지 못했습니다.", { tone: "error" });
+                    }
                   }
                 }}
               >
@@ -253,6 +259,7 @@ export function TaskPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const { showToast } = useToast();
   const taskQuery = useQuery({
     queryKey: ["task", taskId],
     queryFn: () => getTask(taskId!),
@@ -297,7 +304,11 @@ export function TaskPage() {
       if (!task) return;
       await updateTask(task, updates);
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      await refresh();
+      showToast("작업이 수정되었습니다.", { tone: "success" });
+    },
+    onError: () => showToast("작업을 수정하지 못했습니다.", { tone: "error" }),
   });
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -318,8 +329,13 @@ export function TaskPage() {
         }),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       ]);
+      showToast("작업이 삭제되었습니다.", { tone: "success" });
       navigate(`/projects/${deleted.projectId}/board`, { replace: true });
     },
+    onError: (error) => showToast(
+      error instanceof Error ? error.message : "작업을 삭제하지 못했습니다.",
+      { tone: "error" },
+    ),
   });
   if (taskQuery.isLoading)
     return (
@@ -362,31 +378,46 @@ export function TaskPage() {
   const toggleChecklist = async (itemId: string, completed: boolean) => {
     const item = checklist.find((entry) => entry.id === itemId);
     if (!item) return;
-    await updateChecklistItem(item, completed);
-    const nextCompleted = checklist.filter((entry) =>
-      entry.id === itemId ? completed : entry.completed,
-    ).length;
-    await updateTask(task, {
-      progress_mode: "checklist",
-      progress: checklist.length
-        ? Math.round((nextCompleted / checklist.length) * 100)
-        : 0,
-    });
-    await refresh();
+    try {
+      await updateChecklistItem(item, completed);
+      const nextCompleted = checklist.filter((entry) =>
+        entry.id === itemId ? completed : entry.completed,
+      ).length;
+      await updateTask(task, {
+        progress_mode: "checklist",
+        progress: checklist.length
+          ? Math.round((nextCompleted / checklist.length) * 100)
+          : 0,
+      });
+      await refresh();
+      showToast("체크리스트가 수정되었습니다.", { tone: "success" });
+    } catch {
+      showToast("체크리스트를 수정하지 못했습니다.", { tone: "error" });
+    }
   };
   const addChecklist = async (event: FormEvent) => {
     event.preventDefault();
     if (!newChecklist.trim()) return;
-    await addChecklistItem(task, newChecklist.trim(), checklist.length);
-    setNewChecklist("");
-    await refresh();
+    try {
+      await addChecklistItem(task, newChecklist.trim(), checklist.length);
+      setNewChecklist("");
+      await refresh();
+      showToast("체크리스트 항목이 추가되었습니다.", { tone: "success" });
+    } catch {
+      showToast("체크리스트 항목을 추가하지 못했습니다.", { tone: "error" });
+    }
   };
   const postComment = async (event: FormEvent) => {
     event.preventDefault();
     if (!comment.trim()) return;
-    await createComment(task, comment.trim());
-    setComment("");
-    await queryClient.invalidateQueries({ queryKey: ["comments", taskId] });
+    try {
+      await createComment(task, comment.trim());
+      setComment("");
+      await queryClient.invalidateQueries({ queryKey: ["comments", taskId] });
+      showToast("댓글이 등록되었습니다.", { tone: "success" });
+    } catch {
+      showToast("댓글을 등록하지 못했습니다.", { tone: "error" });
+    }
   };
   return (
     <div className="page-wrap max-w-6xl">
@@ -432,16 +463,22 @@ export function TaskPage() {
                 </h1>
               </div>
               {canDelete && (
-                <details className="relative">
-                  <summary aria-label="작업 메뉴" title="작업 메뉴" className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink">
-                    <MoreVertical size={18} />
-                  </summary>
-                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-line bg-surface p-1 shadow-lift">
-                    <button className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-500/10" onClick={() => setDeleteOpen(true)}>
+                <Popover
+                  label="작업 메뉴"
+                  role="menu"
+                  className="w-36 p-1"
+                  trigger={(triggerProps) => (
+                    <button {...triggerProps} type="button" aria-label="작업 메뉴" title="작업 메뉴" className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink">
+                      <MoreVertical size={18} />
+                    </button>
+                  )}
+                >
+                  {(close) => (
+                    <button role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-500/10" onClick={() => { close(); setDeleteOpen(true); }}>
                       작업 삭제
                     </button>
-                  </div>
-                </details>
+                  )}
+                </Popover>
               )}
             </div>
             <div className="mt-6">
@@ -552,10 +589,13 @@ export function TaskPage() {
                             aria-label="댓글 삭제"
                             title="댓글 삭제"
                             onClick={async () => {
-                              await deleteComment(item.id);
-                              await queryClient.invalidateQueries({
-                                queryKey: ["comments", taskId],
-                              });
+                              try {
+                                await deleteComment(item.id);
+                                await queryClient.invalidateQueries({ queryKey: ["comments", taskId] });
+                                showToast("댓글이 삭제되었습니다.", { tone: "success" });
+                              } catch {
+                                showToast("댓글을 삭제하지 못했습니다.", { tone: "error" });
+                              }
                             }}
                           >
                             <Trash2 size={13} />
@@ -568,11 +608,14 @@ export function TaskPage() {
                         className="mt-2 flex gap-2"
                         onSubmit={async (event) => {
                           event.preventDefault();
-                          await updateComment(task, item, editComment.value);
-                          setEditComment(null);
-                          await queryClient.invalidateQueries({
-                            queryKey: ["comments", taskId],
-                          });
+                          try {
+                            await updateComment(task, item, editComment.value);
+                            setEditComment(null);
+                            await queryClient.invalidateQueries({ queryKey: ["comments", taskId] });
+                            showToast("댓글이 수정되었습니다.", { tone: "success" });
+                          } catch {
+                            showToast("댓글을 수정하지 못했습니다.", { tone: "error" });
+                          }
                         }}
                       >
                         <Input
@@ -720,8 +763,13 @@ export function TaskPage() {
                     aria-label={`${assignee.profile?.name ?? "담당자"} 담당 해제`}
                     title="담당 해제"
                     onClick={async () => {
-                      await removeAssignee(task.id, assignee.user_id);
-                      await refresh();
+                      try {
+                        await removeAssignee(task.id, assignee.user_id);
+                        await refresh();
+                        showToast("담당자가 제거되었습니다.", { tone: "success" });
+                      } catch {
+                        showToast("담당자를 제거하지 못했습니다.", { tone: "error" });
+                      }
                     }}
                   >
                     <X size={13} />
@@ -741,9 +789,14 @@ export function TaskPage() {
               defaultValue=""
               onChange={async (event) => {
                 if (!event.target.value) return;
-                await addAssignee(task.id, event.target.value);
-                event.target.value = "";
-                await refresh();
+                try {
+                  await addAssignee(task.id, event.target.value);
+                  event.target.value = "";
+                  await refresh();
+                  showToast("담당자가 추가되었습니다.", { tone: "success" });
+                } catch {
+                  showToast("담당자를 추가하지 못했습니다.", { tone: "error" });
+                }
               }}
             >
               <option value="">프로젝트 멤버 선택</option>
@@ -770,7 +823,6 @@ export function TaskPage() {
         title="작업 삭제"
         description="이 작업을 삭제하시겠습니까? 첨부 파일과 작업 관련 데이터도 함께 삭제됩니다."
       >
-        {deleteMutation.error && <Alert className="mb-4">{deleteMutation.error.message}</Alert>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setDeleteOpen(false)}>취소</Button>
           <Button variant="danger" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>

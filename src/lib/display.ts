@@ -70,10 +70,26 @@ const activityLabels: Record<string, string> = {
   assignee_removed: "담당자를 제거했습니다.",
   comment_created: "댓글을 작성했습니다.",
   file_uploaded: "파일을 업로드했습니다.",
+  announcement_created: "프로젝트 공지를 작성했습니다.",
+  announcement_updated: "프로젝트 공지를 수정했습니다.",
 };
 
 export function activityLabel(action: string): string {
   return activityLabels[action] ?? "프로젝트 정보를 변경했습니다.";
+}
+
+const activityTargetLabels: Record<string, string> = {
+  project: "프로젝트",
+  project_announcement: "프로젝트 공지",
+  task: "작업",
+  assignee: "작업 담당자",
+  comment: "댓글",
+  file: "프로젝트 파일",
+  member: "프로젝트 팀원",
+};
+
+export function activityTargetLabel(subjectType: string): string {
+  return activityTargetLabels[subjectType] ?? "프로젝트 항목";
 }
 
 export function formatRelativeTime(

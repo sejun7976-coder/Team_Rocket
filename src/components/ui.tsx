@@ -1,7 +1,24 @@
-import { X } from "lucide-react";
-import { forwardRef, useEffect, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import {
+  createContext,
+  forwardRef,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../lib/utils";
+
+const POPOVER_OPEN_EVENT = "team-rocket:popover-open";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -76,6 +93,228 @@ export function Modal({ open, onClose, title, description, children, className }
     </div>,
     document.body
   );
+}
+
+export interface PopoverTriggerProps {
+  "aria-controls": string;
+  "aria-expanded": boolean;
+  "aria-haspopup": "dialog" | "menu";
+  onClick: () => void;
+  ref: RefObject<HTMLButtonElement>;
+}
+
+export function Popover({
+  label,
+  trigger,
+  children,
+  align = "right",
+  role = "dialog",
+  className,
+  dismissKey,
+}: {
+  label: string;
+  trigger: (props: PopoverTriggerProps) => ReactNode;
+  children: ReactNode | ((close: () => void) => ReactNode);
+  align?: "left" | "right";
+  role?: "dialog" | "menu";
+  className?: string;
+  dismissKey?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  const contentId = `${id}-content`;
+  const close = () => setOpen(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [dismissKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      close();
+      triggerRef.current?.focus();
+    };
+    const onOtherPopover = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== id) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener(POPOVER_OPEN_EVENT, onOtherPopover);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(POPOVER_OPEN_EVENT, onOtherPopover);
+    };
+  }, [id, open]);
+
+  const toggle = () => {
+    const next = !open;
+    if (next) window.dispatchEvent(new CustomEvent(POPOVER_OPEN_EVENT, { detail: id }));
+    setOpen(next);
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      {trigger({
+        "aria-controls": contentId,
+        "aria-expanded": open,
+        "aria-haspopup": role,
+        onClick: toggle,
+        ref: triggerRef,
+      })}
+      {open && (
+        <div
+          id={contentId}
+          role={role}
+          aria-label={label}
+          className={cn(
+            "absolute top-full z-50 mt-2 rounded-xl border border-line bg-surface shadow-lift",
+            align === "right" ? "right-0" : "left-0",
+            className,
+          )}
+        >
+          {typeof children === "function" ? children(close) : children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Toast({
+  message,
+  tone = "success",
+  onDismiss,
+  duration,
+}: {
+  message: string;
+  tone?: ToastTone;
+  onDismiss: () => void;
+  duration?: number;
+}) {
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      onDismiss,
+      duration ?? (tone === "error" ? 6500 : tone === "warning" ? 5000 : 3500),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [duration, message, onDismiss, tone]);
+  const icon = tone === "success"
+    ? <CheckCircle2 size={18} />
+    : tone === "error"
+      ? <XCircle size={18} />
+      : tone === "warning"
+        ? <AlertTriangle size={18} />
+        : <Info size={18} />;
+  const styles = {
+    success: "border-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+    error: "border-red-500/20 text-red-700 dark:text-red-300",
+    warning: "border-amber-500/20 text-amber-700 dark:text-amber-300",
+    info: "border-blue-500/20 text-blue-700 dark:text-blue-300",
+  } satisfies Record<ToastTone, string>;
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      aria-live={tone === "error" ? "assertive" : "polite"}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-sm font-semibold shadow-2xl",
+        styles[tone],
+      )}
+    >
+      <span className="shrink-0" aria-hidden="true">{icon}</span>
+      <span className="min-w-0 flex-1">{message}</span>
+      <button
+        type="button"
+        aria-label="알림 닫기"
+        className="rounded-md p-1 text-muted hover:bg-raised hover:text-ink"
+        onClick={onDismiss}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+export type ToastTone = "success" | "error" | "warning" | "info";
+
+interface ToastEntry {
+  id: number;
+  message: string;
+  tone: ToastTone;
+  duration?: number;
+  dedupeKey: string;
+}
+
+interface ToastOptions {
+  tone?: ToastTone;
+  duration?: number;
+  dedupeKey?: string;
+}
+
+interface ToastContextValue {
+  showToast: (message: string, options?: ToastOptions) => void;
+  dismissToast: (id: number) => void;
+}
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+let toastSequence = 0;
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+  const showToast = useCallback((message: string, options: ToastOptions = {}) => {
+    const tone = options.tone ?? "info";
+    const dedupeKey = options.dedupeKey ?? `${tone}:${message}`;
+    setToasts((current) => {
+      if (current.some((toast) => toast.dedupeKey === dedupeKey)) return current;
+      const next: ToastEntry = {
+        id: ++toastSequence,
+        message,
+        tone,
+        dedupeKey,
+        ...(options.duration !== undefined ? { duration: options.duration } : {}),
+      };
+      return [...current, next].slice(-6);
+    });
+  }, []);
+  const value = useMemo(() => ({ showToast, dismissToast }), [dismissToast, showToast]);
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      {createPortal(
+        <div
+          data-toast-viewport
+          className="fixed inset-x-4 bottom-20 z-[120] flex flex-col gap-2 sm:left-auto sm:right-5 sm:w-[min(420px,calc(100vw-2.5rem))]"
+          aria-label="작업 알림"
+        >
+          {toasts.map((toast) => (
+            <Toast
+              key={toast.id}
+              message={toast.message}
+              tone={toast.tone}
+              onDismiss={() => dismissToast(toast.id)}
+              {...(toast.duration !== undefined ? { duration: toast.duration } : {})}
+            />
+          ))}
+        </div>,
+        document.body,
+      )}
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast(): ToastContextValue {
+  const context = useContext(ToastContext);
+  if (!context) throw new Error("useToast must be used inside ToastProvider");
+  return context;
 }
 
 export function EmptyState({ icon, title, description, action }: { icon: ReactNode; title: string; description: string; action?: ReactNode }) {

@@ -1,26 +1,43 @@
-import { requireSystemAdmin } from "../_shared/auth.ts";
+import { requirePermission, requireReadyUser } from "../_shared/auth.ts";
+import { ADMIN_PERMISSIONS } from "../_shared/adminPermissions.ts";
 import { ApiError, json, serve } from "../_shared/http.ts";
 import { deriveAdminUserStatus } from "../_shared/accountPolicy.ts";
 import { describeUserAgent } from "../_shared/accessLog.ts";
 
 serve(async (request) => {
-  const { user: actor, admin } = await requireSystemAdmin(request);
+  const context = await requireReadyUser(request);
+  const { user: actor, admin } = await requirePermission(context, ADMIN_PERMISSIONS.USERS_VIEW);
   const retentionStart = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const countStart = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const [{ data: profiles, error: profileError }, { data: authData, error: authError }, { data: accessLogs, error: accessError }, authSummaryResult] = await Promise.all([
+  const [
+    { data: profiles, error: profileError },
+    { data: authData, error: authError },
+    { data: accessLogs, error: accessError },
+    authSummaryResult,
+    { data: permissionRows, error: permissionError },
+  ] = await Promise.all([
     admin.from("profiles").select("id, student_id, name, github_username, system_role, account_status, created_at, first_login_completed_at, password_changed_at, key_reset_at").order("student_id"),
     admin.auth.admin.listUsers({ page: 1, perPage: 100 }),
     admin.from("user_access_logs")
       .select("user_id, event_type, ip_address, country_code, user_agent, created_at")
       .gte("created_at", retentionStart)
       .order("created_at", { ascending: false }),
-    admin.rpc("summarize_auth_audit_logins_admin", { p_actor_id: actor.id })
+    admin.rpc("summarize_auth_audit_logins_admin", { p_actor_id: actor.id }),
+    admin.from("user_admin_permissions").select("user_id, permission").order("permission"),
   ]);
-  if (profileError || authError || accessError) throw new ApiError(500, "USER_LIST_FAILED", "사용자 목록을 불러올 수 없습니다.");
+  if (profileError || authError || accessError || permissionError) {
+    throw new ApiError(500, "USER_LIST_FAILED", "사용자 목록을 불러올 수 없습니다.");
+  }
 
   const authUsers = new Map((authData?.users ?? []).map((authUser) => [authUser.id, authUser]));
   const authSummary = new Map((authSummaryResult.error ? [] : authSummaryResult.data ?? []).map((summary) => [summary.user_id, summary]));
   const accessByUser = new Map<string, typeof accessLogs>();
+  const permissionsByUser = new Map<string, string[]>();
+  for (const row of permissionRows ?? []) {
+    const current = permissionsByUser.get(row.user_id) ?? [];
+    current.push(row.permission);
+    permissionsByUser.set(row.user_id, current);
+  }
   for (const log of accessLogs ?? []) {
     const current = accessByUser.get(log.user_id) ?? [];
     current.push(log);
@@ -40,6 +57,7 @@ serve(async (request) => {
       recentIpAddress: authoritativeAccess?.recent_ip_address ?? recent?.ip_address ?? null,
       recentCountryCode: recent?.country_code ?? null,
       recentDevice: describeUserAgent(authoritativeAccess?.recent_user_agent ?? recent?.user_agent ?? null),
+      permissions: permissionsByUser.get(profile.id) ?? [],
       loginCount30Days: authoritativeAccess
         ? Number(authoritativeAccess.login_count_30_days)
         : userLogs.filter((log) => log.event_type === "login" && Date.parse(log.created_at) >= countStart).length

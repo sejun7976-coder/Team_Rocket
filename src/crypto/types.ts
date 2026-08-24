@@ -30,7 +30,7 @@ export interface ProjectKeyRecord {
 
 export interface EncryptionContext {
   projectId: string;
-  entityType: "project-note" | "task-description" | "checklist" | "comment" | "filename" | "folder-name" | "checksum" | "activity";
+  entityType: "project-note" | "project-announcement" | "task-description" | "checklist" | "comment" | "filename" | "folder-name" | "checksum" | "activity";
   entityId: string;
 }
 

@@ -1,36 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { canActAsSystemAdmin } from "../../supabase/functions/_shared/accountPolicy";
 import createProjectSource from "../../supabase/functions/create-project/index.ts?raw";
-import migrationSql from "../../supabase/migrations/202608220007_admin_project_access_logs.sql?raw";
+import migrationSql from "../../supabase/migrations/202608250002_general_permissions_and_ai_models.sql?raw";
 import dashboardSource from "../pages/DashboardPage.tsx?raw";
 import dialogSource from "../components/NewProjectDialog.tsx?raw";
 
-describe("system-admin-only project creation", () => {
-  it("denies a ready normal user and accepts an active completed system admin", () => {
-    expect(canActAsSystemAdmin("user", "active", { must_change_password: false, system_role: "user" })).toBe(false);
-    expect(canActAsSystemAdmin("admin", "active", { must_change_password: false, system_role: "admin" })).toBe(true);
-    expect(canActAsSystemAdmin("admin", "password_change_required", { must_change_password: false, system_role: "admin" })).toBe(false);
+describe("permission-based project creation", () => {
+  it("uses account readiness plus projects.create without a role gate", () => {
+    expect(createProjectSource).toContain("await requireReadyUser(request)");
+    expect(createProjectSource).toContain("ADMIN_PERMISSIONS.PROJECTS_CREATE");
+    expect(createProjectSource).toContain("requirePermission(context");
+    expect(createProjectSource).not.toContain("requireSystemAdmin(request)");
+    expect(createProjectSource).not.toContain("SYSTEM_ADMIN_REQUIRED");
   });
 
-  it("uses the server guard that returns SYSTEM_ADMIN_REQUIRED for direct calls", () => {
-    expect(createProjectSource).toContain('requireSystemAdmin(request)');
-    expect(createProjectSource).not.toContain('requireReadyUser(request)');
-    expect(createProjectSource).toContain('"SYSTEM_ADMIN_REQUIRED"');
+  it("verifies projects.create again in the service-role RPC", () => {
+    const beginFunction = migrationSql.match(/create or replace function public\.begin_project_creation[\s\S]*?\$\$;/u)?.[0] ?? "";
+    expect(beginFunction).toContain("auth.role() <> 'service_role'");
+    expect(beginFunction).toContain("permission.permission = 'projects.create'");
+    expect(beginFunction).toContain("actor.account_status = 'active'");
+    expect(beginFunction).not.toContain("actor.system_role");
+    expect(beginFunction).toContain("PERMISSION_REQUIRED");
   });
 
-  it("verifies the trusted creator in the service-role RPC", () => {
-    expect(migrationSql).toContain("auth.role() <> 'service_role'");
-    expect(migrationSql).toContain("system_role = 'admin'");
-    expect(migrationSql).toContain("account_status = 'active'");
-    expect(migrationSql).toContain("errcode = 'PPC01'");
-    expect(migrationSql).toContain("from public, anon, authenticated");
-  });
-
-  it("does not render or execute project creation UI for a normal user", () => {
-    expect(dashboardSource).toContain("const admin = isSystemAdmin(user, profile)");
-    expect(dashboardSource).toContain("action={admin ?");
-    expect(dashboardSource).toContain("{admin && <NewProjectDialog");
-    expect(dialogSource).toContain("if (!admin || !open) return null");
-    expect(dialogSource).toContain("if (!admin) throw new Error");
+  it("shows creation UI to any User/Admin account with the capability", () => {
+    expect(dashboardSource).toContain("usePermissions");
+    expect(dashboardSource).toContain("canCreateProject");
+    expect(dashboardSource).toContain("ADMIN_PERMISSIONS.PROJECTS_CREATE");
+    expect(dialogSource).toContain("if (!canCreate || !open) return null");
+    expect(dialogSource).not.toContain("if (!admin");
   });
 });

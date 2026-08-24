@@ -1,11 +1,13 @@
-import { requireSystemAdmin } from "../_shared/auth.ts";
+import { requirePermission, requireReadyUser } from "../_shared/auth.ts";
+import { ADMIN_PERMISSIONS } from "../_shared/adminPermissions.ts";
 import { deriveInitialAuthCredential } from "../_shared/authCredential.ts";
 import { INITIAL_PASSWORD } from "../_shared/identity.ts";
 import { ApiError, json, readJson, serve } from "../_shared/http.ts";
 import { requireUuid } from "../_shared/validation.ts";
 
 serve(async (request) => {
-  const { user: actor, admin } = await requireSystemAdmin(request);
+  const context = await requireReadyUser(request);
+  const { user: actor, admin } = await requirePermission(context, ADMIN_PERMISSIONS.USERS_RESET_PASSWORD);
   const body = await readJson<{ userId?: unknown }>(request);
   const userId = requireUuid(body.userId, "User ID");
   if (userId === actor.id) throw new ApiError(400, "SELF_RESET_DENIED", "현재 로그인한 관리자 계정은 여기서 초기화할 수 없습니다.");

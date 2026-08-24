@@ -35,3 +35,73 @@ minimum_password_length = 6
 [edge_runtime]
 enabled = true
 policy = "per_worker"
+
+# Browser preflight requests do not include the requested POST Authorization
+# header. These Functions therefore let OPTIONS reach the shared CORS handler
+# and authenticate every POST inside the Function with requireUser or
+# requireReadyUser, plus requirePermission for capability-protected actions.
+[functions.admin-create-user]
+verify_jwt = false
+
+[functions.admin-delete-user]
+verify_jwt = false
+
+[functions.admin-list-access-logs]
+verify_jwt = false
+
+[functions.admin-list-projects]
+verify_jwt = false
+
+[functions.admin-list-users]
+verify_jwt = false
+
+[functions.admin-reset-password]
+verify_jwt = false
+
+[functions.admin-set-user-role]
+verify_jwt = false
+
+[functions.admin-set-user-permissions]
+verify_jwt = false
+
+[functions.admin-set-user-status]
+verify_jwt = false
+
+[functions.complete-first-login]
+verify_jwt = false
+
+[functions.create-project]
+verify_jwt = false
+
+[functions.delete-github-repository]
+verify_jwt = false
+
+[functions.delete-task]
+verify_jwt = false
+
+[functions.github-repository-status]
+verify_jwt = false
+
+[functions.github-retry]
+verify_jwt = false
+
+[functions.record-access-event]
+verify_jwt = false
+
+[functions.remove-project-member]
+verify_jwt = false
+
+[functions.sync-project-member]
+verify_jwt = false
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.ai-models]
+verify_jwt = false
+
+[functions.admin-ai-settings]
+verify_jwt = false
+
+[functions.admin-ai-logs]
+verify_jwt = false

@@ -43,10 +43,17 @@ import {
   ProjectTeamPage,
 } from "./pages/ProjectSecondaryPages";
 import { TaskPage } from "./pages/TaskPage";
+import { AdminAISettingsPage } from "./pages/AdminAISettingsPage";
+import { AdminAILogsPage } from "./pages/AdminAILogsPage";
 import { useAuthStore } from "./stores/authStore";
 import { useProjectKeyStore } from "./stores/projectKeyStore";
 import { supabase } from "./lib/supabase";
 import type { Profile } from "./types/domain";
+import { usePermissions } from "./hooks/usePermissions";
+import {
+  ADMIN_PERMISSIONS,
+  type Permission,
+} from "../supabase/functions/_shared/adminPermissions";
 
 function LoadingScreen() {
   return (
@@ -75,13 +82,21 @@ function ProtectedLayout() {
   );
 }
 
-function AdminGuard() {
+function PermissionGuard({ permission }: { permission: Permission }) {
+  const permissions = usePermissions();
+  if (permissions.isLoading) return <LoadingScreen />;
+  return permissions.has(permission)
+    ? <Outlet />
+    : <Navigate to="/dashboard" replace />;
+}
+
+function SystemAdminPermissionGuard({ permission }: { permission: Permission }) {
   const { user, profile } = useAuthStore();
-  return isSystemAdmin(user, profile) ? (
-    <Outlet />
-  ) : (
-    <Navigate to="/dashboard" replace />
-  );
+  const permissions = usePermissions();
+  if (permissions.isLoading) return <LoadingScreen />;
+  return isSystemAdmin(user, profile) && permissions.has(permission)
+    ? <Outlet />
+    : <Navigate to="/dashboard" replace />;
 }
 
 function Bootstrap({ children }: { children: ReactNode }) {
@@ -151,10 +166,20 @@ export function App() {
             <Route path="activity" element={<GlobalActivityPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route element={<AdminGuard />}>
+            <Route element={<PermissionGuard permission={ADMIN_PERMISSIONS.USERS_VIEW} />}>
               <Route path="admin/users" element={<AdminUsersPage />} />
+            </Route>
+            <Route element={<PermissionGuard permission={ADMIN_PERMISSIONS.PROJECTS_VIEW} />}>
               <Route path="admin/projects" element={<AdminProjectsPage />} />
+            </Route>
+            <Route element={<PermissionGuard permission={ADMIN_PERMISSIONS.USERS_MANAGE_PERMISSIONS} />}>
               <Route path="admin/system" element={<AdminSystemPage />} />
+            </Route>
+            <Route element={<PermissionGuard permission={ADMIN_PERMISSIONS.AI_MANAGE} />}>
+              <Route path="admin/ai" element={<AdminAISettingsPage />} />
+            </Route>
+            <Route element={<SystemAdminPermissionGuard permission={ADMIN_PERMISSIONS.AI_LOGS_VIEW} />}>
+              <Route path="admin/ai-logs" element={<AdminAILogsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

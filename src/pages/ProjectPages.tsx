@@ -18,12 +18,16 @@ import {
   LayoutDashboard,
   ListTodo,
   MessageSquare,
+  Megaphone,
   MoreHorizontal,
   Paperclip,
+  Pencil,
   Plus,
+  Save,
   Search,
   Settings,
   ShieldAlert,
+  Trash2,
   AlertTriangle,
   Upload,
   Users,
@@ -34,19 +38,26 @@ import {
   Link,
   NavLink,
   Outlet,
+  useLocation,
   useNavigate,
   useOutletContext,
   useParams,
 } from "react-router-dom";
 import { useProjectRealtime } from "../hooks/useProjectRealtime";
 import { cn } from "../lib/utils";
-import { getProject, listProjectMembers } from "../services/projects";
-import { listActivities } from "../services/activity";
-import { createTask, listTasks, updateTask } from "../services/tasks";
+import {
+  getProject,
+  getProjectAnnouncement,
+  listProjectMembers,
+  saveProjectAnnouncement,
+} from "../services/projects";
+import { listProjectActivities } from "../services/activity";
+import { createTask, deleteTask, listTasks, updateTask } from "../services/tasks";
 import { uploadProjectFile } from "../services/files";
 import { MAX_FILE_SIZE_LABEL, validateProjectFile } from "../lib/filePolicy";
 import {
   activityLabel,
+  activityTargetLabel,
   projectRoleLabels,
   taskPriorityLabels,
   taskStatusLabels,
@@ -69,8 +80,10 @@ import {
   Input,
   Modal,
   PageHeader,
+  Popover,
   Spinner,
   StatCard,
+  useToast,
 } from "../components/ui";
 
 const projectNav = [
@@ -93,9 +106,15 @@ export function useProjectContext(): ProjectContext {
 
 export function ProjectLayoutPage() {
   const { projectId } = useParams();
+  const location = useLocation();
   const project = useQuery({
     queryKey: ["project", projectId],
     queryFn: () => getProject(projectId!),
+    enabled: Boolean(projectId),
+  });
+  const members = useQuery({
+    queryKey: ["members", projectId],
+    queryFn: () => listProjectMembers(projectId!),
     enabled: Boolean(projectId),
   });
   useProjectRealtime(projectId);
@@ -118,15 +137,15 @@ export function ProjectLayoutPage() {
   return (
     <div>
       <div className="border-b border-line bg-surface">
-        <div className="mx-auto max-w-[1500px] px-4 pt-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10 text-lg font-extrabold text-brand">
-                {project.data.name[0]}
+        <div className="mx-auto max-w-[1500px] px-4 pt-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-lg font-extrabold text-brand">
+                {project.data.name.charAt(0).toUpperCase() || "P"}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-extrabold text-ink">
+              <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h1 className="max-w-full truncate text-xl font-extrabold text-ink">
                     {project.data.name}
                   </h1>
                   <Badge
@@ -148,8 +167,62 @@ export function ProjectLayoutPage() {
                 <p className="mt-0.5 text-xs text-muted">Team Rocket 프로젝트 워크스페이스</p>
               </div>
             </div>
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+              <span className="text-[11px] font-bold text-muted sm:hidden lg:inline">참여 팀원</span>
+              <Popover
+                label="프로젝트 참여 팀원"
+                dismissKey={location.pathname}
+                className="w-[min(320px,calc(100vw-2rem))] overflow-hidden"
+                trigger={(triggerProps) => (
+                  <button
+                    {...triggerProps}
+                    type="button"
+                    aria-label={`프로젝트 참여 팀원 ${members.data?.length ?? 0}명 보기`}
+                    title="전체 참여 팀원 보기"
+                    className="flex cursor-pointer items-center rounded-xl px-1.5 py-1 transition hover:bg-raised"
+                  >
+                    <span className="flex -space-x-2">
+                      {members.data?.slice(0, 5).map((member) => (
+                        <span key={member.user_id} title={member.profile?.name ?? "팀원"} className="rounded-full ring-2 ring-surface">
+                          <Avatar
+                            name={member.profile?.name ?? "팀원"}
+                            url={member.profile?.avatar_url}
+                            size="sm"
+                          />
+                        </span>
+                      ))}
+                    </span>
+                    {(members.data?.length ?? 0) > 5 && (
+                      <span className="ml-1.5 text-xs font-bold text-muted">+{members.data!.length - 5}</span>
+                    )}
+                    {members.isLoading && <Spinner className="ml-1 h-5 w-5" />}
+                    {!members.isLoading && !members.data?.length && <Users className="text-muted" size={19} />}
+                  </button>
+                )}
+              >
+                <div className="border-b border-line px-4 py-3">
+                  <h2 className="text-sm font-extrabold text-ink">참여 팀원</h2>
+                  <p className="mt-0.5 text-[10px] text-muted">총 {members.data?.length ?? 0}명</p>
+                </div>
+                <div className="max-h-80 divide-y divide-line overflow-y-auto p-1">
+                  {members.data?.map((member) => (
+                    <div key={member.user_id} className="flex items-center gap-3 rounded-lg px-3 py-2.5">
+                      <Avatar name={member.profile?.name ?? "팀원"} url={member.profile?.avatar_url} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-ink">{member.profile?.name ?? "팀원"}</p>
+                        <p className="truncate text-[10px] text-muted">{member.profile?.student_id ?? "식별 정보 없음"}</p>
+                      </div>
+                      <Badge tone={member.role === "owner" ? "purple" : "neutral"}>
+                        {projectRoleLabels[member.role]}
+                      </Badge>
+                    </div>
+                  ))}
+                  {members.error && <p className="p-4 text-center text-xs text-red-600">팀원 목록을 불러오지 못했습니다.</p>}
+                </div>
+              </Popover>
+            </div>
           </div>
-          <nav className="scrollbar-thin mt-5 flex gap-1 overflow-x-auto pb-0">
+          <nav className="scrollbar-thin mt-3 flex gap-1 overflow-x-auto pb-0">
             {projectNav.map(([path, label, Icon]) => (
                 <NavLink
                   end={path === ""}
@@ -199,19 +272,111 @@ function projectProgress(tasks: Task[]): number {
     : 0;
 }
 
+function ProjectAnnouncementCard({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const announcement = useQuery({
+    queryKey: ["project-announcement", projectId],
+    queryFn: () => getProjectAnnouncement(projectId),
+  });
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const saveAnnouncement = useMutation({
+    mutationFn: () => saveProjectAnnouncement(projectId, draft),
+    onSuccess: async (saved) => {
+      queryClient.setQueryData(["project-announcement", projectId], saved);
+      setEditing(false);
+      showToast("공지사항이 저장되었습니다.", { tone: "success" });
+      await queryClient.invalidateQueries({ queryKey: ["activities", projectId] });
+    },
+    onError: () => showToast("공지사항을 저장하지 못했습니다.", { tone: "error" }),
+  });
+  const beginEditing = () => {
+    setDraft(announcement.data?.content ?? "");
+    saveAnnouncement.reset();
+    setEditing(true);
+  };
+  const cancelEditing = () => {
+    setDraft(announcement.data?.content ?? "");
+    saveAnnouncement.reset();
+    setEditing(false);
+  };
+  return (
+    <>
+      <section className="panel mb-4 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/10 text-brand">
+              <Megaphone size={17} />
+            </span>
+            <div>
+              <h2 className="text-sm font-extrabold text-ink">공지사항</h2>
+              <p className="text-[10px] text-muted">프로젝트 멤버 모두가 함께 편집할 수 있습니다.</p>
+            </div>
+          </div>
+          {!editing && (
+            <Button size="sm" variant="secondary" onClick={beginEditing} disabled={announcement.isLoading}>
+              <Pencil size={14} /> {announcement.data?.content ? "공지 편집" : "공지 작성"}
+            </Button>
+          )}
+        </div>
+        <div className="p-5">
+          {announcement.isLoading ? (
+            <div className="flex min-h-20 items-center justify-center"><Spinner /></div>
+          ) : announcement.error ? (
+            <Alert>
+              공지사항을 불러오지 못했습니다. <Button size="sm" variant="ghost" onClick={() => void announcement.refetch()}>다시 시도</Button>
+            </Alert>
+          ) : editing ? (
+            <form onSubmit={(event) => { event.preventDefault(); saveAnnouncement.mutate(); }}>
+              <label className="label" htmlFor="project-announcement">공지 내용</label>
+              <textarea
+                id="project-announcement"
+                className="field min-h-28 resize-y"
+                value={draft}
+                maxLength={5000}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="팀원에게 공유할 중요 일정이나 안내를 작성하세요."
+                autoFocus
+              />
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-[10px] text-muted">{draft.length.toLocaleString("ko-KR")} / 5,000자</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={cancelEditing} disabled={saveAnnouncement.isPending}>취소</Button>
+                  <Button size="sm" type="submit" disabled={saveAnnouncement.isPending}>
+                    {saveAnnouncement.isPending ? <Spinner className="h-4 w-4" /> : <Save size={14} />} 저장
+                  </Button>
+                </div>
+              </div>
+            </form>
+          ) : announcement.data?.content ? (
+            <div>
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-ink">{announcement.data.content}</p>
+              <p className="mt-4 text-[10px] text-muted">
+                {announcement.data.updater?.name ?? "알 수 없는 사용자"}님이 {new Date(announcement.data.updated_at).toLocaleString("ko-KR")} 수정
+              </p>
+            </div>
+          ) : (
+            <div className="py-4 text-center">
+              <p className="text-sm font-semibold text-ink">등록된 공지가 없습니다.</p>
+              <p className="mt-1 text-xs text-muted">중요한 일정이나 팀 안내를 공유해 보세요.</p>
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function ProjectOverviewPage() {
   const { project } = useProjectContext();
   const tasks = useQuery({
     queryKey: ["tasks", project.id],
     queryFn: () => listTasks(project.id),
   });
-  const members = useQuery({
-    queryKey: ["members", project.id],
-    queryFn: () => listProjectMembers(project.id),
-  });
   const activities = useQuery({
     queryKey: ["activities", project.id],
-    queryFn: () => listActivities(project.id),
+    queryFn: () => listProjectActivities(project.id),
   });
   const user = useAuthStore((state) => state.user);
   const list = tasks.data ?? [];
@@ -229,11 +394,12 @@ export function ProjectOverviewPage() {
         title="프로젝트 현황"
         description={project.description ?? "프로젝트 설명이 없습니다."}
       />
+      <ProjectAnnouncementCard projectId={project.id} />
       <section className="panel mb-4 p-5">
         <div className="flex items-center justify-between text-sm"><h2 className="font-extrabold text-ink">프로젝트 진행률</h2><strong className="text-brand">{projectProgress(list)}%</strong></div>
         <div className="mt-3 h-3 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-brand transition-all" style={{ width: `${projectProgress(list)}%` }} /></div>
       </section>
-      {tasks.error || members.error || activities.error ? (
+      {tasks.error || activities.error ? (
         <Alert>프로젝트 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</Alert>
       ) : tasks.isLoading ? (
         <Spinner />
@@ -262,7 +428,7 @@ export function ProjectOverviewPage() {
             />
             <StatCard label="지연" value={overdue.length} icon={<AlertTriangle size={18} />} />
           </div>
-          <div className="mt-6 grid gap-5 xl:grid-cols-[1.5fr_1fr]">
+          <div className="mt-6">
             <section className="panel p-5">
               <div className="flex items-center justify-between">
                 <h2 className="font-extrabold text-ink">최근 작업</h2>
@@ -298,43 +464,8 @@ export function ProjectOverviewPage() {
                 )}
               </div>
             </section>
-            <section className="panel p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="font-extrabold text-ink">팀원</h2>
-                <Link
-                  to={`/projects/${project.id}/team`}
-                  className="text-xs font-semibold text-brand"
-                >
-                  관리
-                </Link>
-              </div>
-              <div className="mt-4 space-y-3">
-                {members.data?.map((member) => (
-                  <div key={member.user_id} className="flex items-center gap-3">
-                    <Avatar
-                      name={member.profile?.name ?? "팀원"}
-                      url={member.profile?.avatar_url}
-                      size="sm"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-ink">
-                        {member.profile?.name}
-                      </div>
-                      <div className="text-[11px] text-muted">
-                        {member.profile?.student_id}
-                      </div>
-                    </div>
-                    <Badge
-                      tone={member.role === "owner" ? "purple" : "neutral"}
-                    >
-                      {projectRoleLabels[member.role]}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </section>
           </div>
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <div className="mt-5 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
             <section className="panel p-5">
               <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">내 작업</h2><Link to="/my-tasks" className="text-xs font-semibold text-brand">전체 보기</Link></div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center"><div className="subtle-panel p-3"><strong className="block text-lg text-ink">{myTasks.filter((task) => inDays(task) === 0 && task.status !== "done").length}</strong><span className="text-[10px] text-muted">오늘</span></div><div className="subtle-panel p-3"><strong className="block text-lg text-ink">{myTasks.filter((task) => inDays(task) !== null && inDays(task)! >= 0 && inDays(task)! <= 7 && task.status !== "done").length}</strong><span className="text-[10px] text-muted">이번 주</span></div><div className="subtle-panel p-3"><strong className="block text-lg text-red-600">{myTasks.filter((task) => task.status !== "done" && inDays(task) !== null && inDays(task)! < 0).length}</strong><span className="text-[10px] text-muted">지연</span></div></div>
@@ -344,13 +475,9 @@ export function ProjectOverviewPage() {
               <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">마감 임박</h2><Link to={`/projects/${project.id}/calendar`} className="text-xs font-semibold text-brand">캘린더 보기</Link></div>
               <div className="mt-3 space-y-2">{dueSoon.map((task) => <Link key={task.id} to={`/tasks/${task.id}`} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:bg-raised"><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span><span className={`text-xs font-bold ${inDays(task)! < 0 ? "text-red-600" : "text-muted"}`}>{inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘" : inDays(task) === 1 ? "내일" : `${inDays(task)}일 이내`}</span></Link>)}{!dueSoon.length && <p className="py-6 text-center text-sm text-muted">3일 이내 마감 작업이 없습니다.</p>}</div>
             </section>
-            <section className="panel p-5">
+            <section className="panel p-5 lg:col-span-2 2xl:col-span-1">
               <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">최근 활동</h2><Link to={`/projects/${project.id}/activity`} className="text-xs font-semibold text-brand">전체 보기</Link></div>
-              <div className="mt-3 space-y-3">{activities.data?.slice(0, 6).map((activity) => <div key={activity.id} className="flex gap-3"><Avatar name={activity.actor?.name ?? "시스템"} url={activity.actor?.avatar_url} size="sm" /><div><p className="text-sm text-ink"><strong>{activity.actor?.name ?? "시스템"}</strong>님이 {activityLabel(activity.action)}</p><p className="mt-0.5 text-[10px] text-muted">{new Date(activity.created_at).toLocaleString("ko-KR")}</p></div></div>)}</div>
-            </section>
-            <section className="panel p-5">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">팀 현황</h2><Link to={`/projects/${project.id}/team`} className="text-xs font-semibold text-brand">팀 보기</Link></div>
-              <div className="mt-3 space-y-3">{members.data?.slice(0, 8).map((member) => { const assigned = list.filter((task) => task.task_assignees?.some((assignee) => assignee.user_id === member.user_id)); const done = assigned.filter((task) => task.status === "done").length; return <div key={member.user_id} className="flex items-center gap-3"><Avatar name={member.profile?.name ?? "팀원"} url={member.profile?.avatar_url} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{member.profile?.name}</span><span className="text-xs text-muted">완료 <strong className="text-ink">{done}</strong> / 전체 <strong className="text-ink">{assigned.length}</strong></span></div>; })}</div>
+              <div className="mt-3 space-y-3">{activities.data?.slice(0, 6).map((activity) => <div key={activity.id} className="flex gap-3"><Avatar name={activity.actor?.name ?? "시스템"} url={activity.actor?.avatar_url} size="sm" /><div className="min-w-0"><p className="text-sm text-ink"><strong>{activity.actor?.name ?? "시스템"}</strong>님이 {activityLabel(activity.action)}</p><p className="mt-0.5 text-[10px] text-muted">{activityTargetLabel(activity.subject_type)} · {new Date(activity.created_at).toLocaleString("ko-KR")}</p></div></div>)}</div>
             </section>
           </div>
         </>
@@ -359,7 +486,7 @@ export function ProjectOverviewPage() {
   );
 }
 
-function TaskFormDialog({
+export function TaskFormDialog({
   open,
   onClose,
   projectId,
@@ -371,6 +498,7 @@ function TaskFormDialog({
   members: ProjectMember[];
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
@@ -382,14 +510,14 @@ function TaskFormDialog({
     name: string;
     percent: number;
   } | null>(null);
-  const [partialMessage, setPartialMessage] = useState("");
   const reset = () => {
     setTitle("");
     setDescription("");
+    setPriority("medium");
+    setDueDate("");
     setAssigneeIds([]);
     setAttachments([]);
     setFileError("");
-    setPartialMessage("");
     setUploadProgress(null);
   };
   const close = () => {
@@ -442,22 +570,30 @@ function TaskFormDialog({
       }
       return { task, failed, total: attachments.length };
     },
-    onSuccess: async ({ failed, total }) => {
+    onSuccess: async ({ task, failed, total }) => {
+      queryClient.setQueryData<Task[]>(["tasks", projectId], (current = []) =>
+        current.some((item) => item.id === task.id) ? current : [task, ...current],
+      );
+      reset();
+      mutation.reset();
+      onClose();
+      showToast("작업이 생성되었습니다.", { tone: "success", dedupeKey: `task-created:${task.id}` });
+      if (failed) {
+        showToast(`작업은 생성됐지만 ${total}개 파일 중 ${failed}개를 업로드하지 못했습니다.`, {
+          tone: "warning",
+          dedupeKey: `task-attachment-failed:${task.id}`,
+        });
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
         queryClient.invalidateQueries({ queryKey: ["files", projectId] }),
       ]);
-      setUploadProgress(null);
-      if (failed)
-        setPartialMessage(
-          `작업은 생성되었습니다. ${total}개 파일 중 ${failed}개 업로드에 실패했습니다.`,
-        );
-      else close();
     },
+    onError: () => showToast("작업을 생성하지 못했습니다.", { tone: "error" }),
   });
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!partialMessage) mutation.mutate();
+    mutation.mutate();
   };
   return (
     <Modal
@@ -471,16 +607,6 @@ function TaskFormDialog({
         onSubmit={submit}
         className="max-h-[75vh] space-y-4 overflow-y-auto pr-1"
       >
-        {mutation.error && (
-          <div className="rounded-xl bg-red-500/10 p-3 text-sm text-red-600">
-            {mutation.error.message}
-          </div>
-        )}
-        {partialMessage && (
-          <div className="rounded-xl bg-amber-500/10 p-3 text-sm text-amber-700">
-            {partialMessage}
-          </div>
-        )}
         <div>
           <label className="label" htmlFor="task-title">
             제목
@@ -492,7 +618,7 @@ function TaskFormDialog({
             maxLength={240}
             required
             autoFocus
-            disabled={Boolean(partialMessage)}
+            disabled={mutation.isPending}
           />
         </div>
         <div>
@@ -504,7 +630,7 @@ function TaskFormDialog({
             className="field min-h-24"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            disabled={Boolean(partialMessage)}
+            disabled={mutation.isPending}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -519,7 +645,7 @@ function TaskFormDialog({
               onChange={(event) =>
                 setPriority(event.target.value as TaskPriority)
               }
-              disabled={Boolean(partialMessage)}
+              disabled={mutation.isPending}
             >
               <option value="low">낮음</option>
               <option value="medium">보통</option>
@@ -536,11 +662,11 @@ function TaskFormDialog({
               type="date"
               value={dueDate}
               onChange={(event) => setDueDate(event.target.value)}
-              disabled={Boolean(partialMessage)}
+              disabled={mutation.isPending}
             />
           </div>
         </div>
-        <fieldset disabled={Boolean(partialMessage)}>
+        <fieldset disabled={mutation.isPending}>
           <legend className="label">담당자 (복수 선택)</legend>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-line p-2">
             {members.map((member) => (
@@ -571,7 +697,7 @@ function TaskFormDialog({
             ))}
           </div>
         </fieldset>
-        <fieldset disabled={mutation.isPending || Boolean(partialMessage)}>
+        <fieldset disabled={mutation.isPending}>
           <legend className="label">첨부 파일 (선택)</legend>
           <label
             onDragOver={(event) => event.preventDefault()}
@@ -647,13 +773,11 @@ function TaskFormDialog({
         )}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={close}>
-            {partialMessage ? "닫기" : "취소"}
+            취소
           </Button>
-          {!partialMessage && (
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? <Spinner /> : "작업 생성"}
-            </Button>
-          )}
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? <Spinner /> : "작업 생성"}
+          </Button>
         </div>
       </form>
     </Modal>
@@ -684,9 +808,48 @@ function AssigneeStack({ task }: { task: Task }) {
   );
 }
 
-function DraggableTaskCard({ task }: { task: Task }) {
+const nextTaskStatus: Record<TaskStatus, TaskStatus> = {
+  todo: "in_progress",
+  in_progress: "review",
+  review: "done",
+  done: "todo",
+};
+
+export function DraggableTaskCard({ task }: { task: Task }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const drag = useDraggable({ id: task.id, data: { status: task.status } });
+  const statusMutation = useMutation({
+    mutationFn: async () => {
+      const status = nextTaskStatus[task.status];
+      await updateTask(task, { status });
+      return status;
+    },
+    onSuccess: async (status) => {
+      queryClient.setQueryData<Task[]>(["tasks", task.project_id], (current = []) =>
+        current.map((item) => item.id === task.id
+          ? { ...item, status, revision: item.revision + 1 }
+          : item),
+      );
+      showToast(`작업 상태가 ${taskStatusLabels[status]}(으)로 변경되었습니다.`, { tone: "success" });
+      await queryClient.invalidateQueries({ queryKey: ["tasks", task.project_id] });
+    },
+    onError: () => showToast("작업 상태를 변경하지 못했습니다.", { tone: "error" }),
+  });
+  const remove = async () => {
+    if (!window.confirm(`"${task.title}" 작업을 삭제할까요?`)) return;
+    try {
+      await deleteTask(task.id);
+      queryClient.setQueryData<Task[]>(["tasks", task.project_id], (current = []) =>
+        current.filter((item) => item.id !== task.id),
+      );
+      showToast("작업이 삭제되었습니다.", { tone: "success" });
+      await queryClient.invalidateQueries({ queryKey: ["tasks", task.project_id] });
+    } catch {
+      showToast("작업을 삭제하지 못했습니다.", { tone: "error" });
+    }
+  };
   const transform = drag.transform
     ? `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0)`
     : undefined;
@@ -696,7 +859,8 @@ function DraggableTaskCard({ task }: { task: Task }) {
       style={{ transform }}
       {...drag.listeners}
       {...drag.attributes}
-      onClick={() => {
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button, a, input, select, textarea, [role='menuitem']")) return;
         if (!drag.isDragging) navigate(`/tasks/${task.id}`);
       }}
       className={cn(
@@ -716,7 +880,44 @@ function DraggableTaskCard({ task }: { task: Task }) {
         >
           {taskPriorityLabels[task.priority]}
         </Badge>
-        <MoreHorizontal size={15} className="text-muted" />
+        <div
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Popover
+            label={`${task.title} 작업 메뉴`}
+            role="menu"
+            className="w-40 p-1"
+            trigger={(triggerProps) => (
+              <button
+                {...triggerProps}
+                type="button"
+                aria-label={`${task.title} 작업 메뉴`}
+                title="작업 메뉴"
+                className="rounded-lg p-1.5 text-muted transition hover:bg-raised hover:text-ink"
+              >
+                <MoreHorizontal size={16} />
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                <button role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised" onClick={() => { close(); navigate(`/tasks/${task.id}`); }}>
+                  작업 열기
+                </button>
+                <button role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised" onClick={() => { close(); navigate(`/tasks/${task.id}`); }}>
+                  수정
+                </button>
+                <button role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-raised disabled:opacity-50" disabled={statusMutation.isPending} onClick={() => { close(); statusMutation.mutate(); }}>
+                  {taskStatusLabels[nextTaskStatus[task.status]]}(으)로 이동
+                </button>
+                <button role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-xs text-red-600 hover:bg-red-500/10" onClick={() => { close(); void remove(); }}>
+                  <span className="flex items-center gap-2"><Trash2 size={13} /> 삭제</span>
+                </button>
+              </>
+            )}
+          </Popover>
+        </div>
       </div>
       <h3 className="text-sm font-bold leading-5 text-ink">{task.title}</h3>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line">
@@ -792,6 +993,7 @@ export function BoardPage() {
   const { project } = useProjectContext();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const { showToast } = useToast();
   const tasks = useQuery({
     queryKey: ["tasks", project.id],
     queryFn: () => listTasks(project.id),
@@ -835,8 +1037,16 @@ export function BoardPage() {
     );
     try {
       await updateTask(task, { status: targetStatus });
-    } catch {
+      showToast("작업 상태가 변경되었습니다.", {
+        tone: "success",
+        dedupeKey: `task-moved:${task.id}:${targetStatus}`,
+      });
+    } catch (error) {
       queryClient.setQueryData(["tasks", project.id], previous);
+      showToast(error instanceof Error ? error.message : "작업을 이동하지 못했습니다.", {
+        tone: "error",
+        dedupeKey: `task-move-failed:${task.id}`,
+      });
     } finally {
       await queryClient.invalidateQueries({ queryKey: ["tasks", project.id] });
     }

@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listActivities } from "../services/activity";
+import { listProjectActivities } from "../services/activity";
 import {
   deleteProjectFile,
   downloadProjectFile,
@@ -62,7 +62,7 @@ import type {
 } from "../types/domain";
 import { formatBytes } from "../lib/utils";
 import { MAX_FILE_SIZE_LABEL } from "../lib/filePolicy";
-import { activityLabel, githubErrorMessage, githubSyncStatusLabels, projectRoleLabels, taskStatusLabels } from "../lib/display";
+import { activityLabel, activityTargetLabel, githubErrorMessage, githubSyncStatusLabels, projectRoleLabels, taskStatusLabels } from "../lib/display";
 import { useProjectContext } from "./ProjectPages";
 import {
   Alert,
@@ -74,8 +74,11 @@ import {
   Modal,
   PageHeader,
   Spinner,
+  useToast,
 } from "../components/ui";
 import { useProjectKeyStore } from "../stores/projectKeyStore";
+import { usePermissions } from "../hooks/usePermissions";
+import { ADMIN_PERMISSIONS } from "../../supabase/functions/_shared/adminPermissions";
 
 export function ProjectCalendarPage() {
   const { project } = useProjectContext();
@@ -280,6 +283,7 @@ export function ProjectFilesPage() {
   const { project } = useProjectContext();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const { showToast } = useToast();
   const members = useQuery({
     queryKey: ["members", project.id],
     queryFn: () => listProjectMembers(project.id),
@@ -315,8 +319,10 @@ export function ProjectFilesPage() {
     onSuccess: async () => {
       setFolderName("");
       setFolderOpen(false);
+      showToast("폴더가 생성되었습니다.", { tone: "success" });
       await queryClient.invalidateQueries({ queryKey: ["file-folders", project.id] });
     },
+    onError: () => showToast("폴더를 생성하지 못했습니다.", { tone: "error" }),
   });
   const visibleFiles = [...(files.data ?? [])]
     .filter((file) => folderId === "all" || (folderId === "root" ? !file.folder_id : file.folder_id === folderId))
@@ -341,6 +347,9 @@ export function ProjectFilesPage() {
         folderId === "all" || folderId === "root" ? undefined : folderId,
       );
       await queryClient.invalidateQueries({ queryKey: ["files", project.id] });
+      showToast("파일이 업로드되었습니다.", { tone: "success" });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "파일을 업로드하지 못했습니다.", { tone: "error" });
     } finally {
       setProgress(null);
     }
@@ -442,14 +451,14 @@ export function ProjectFilesPage() {
                   <p className="mt-1 text-[11px] text-muted xl:hidden">{formatBytes(file.original_size)} · {file.uploader?.name ?? "사용자"} · {new Date(file.created_at).toLocaleDateString("ko-KR")}</p>
                 </div>
               </div>
-              <div>{file.uploaded_by === user?.id || role === "owner" || role === "admin" ? <select aria-label={`${file.filename ?? "파일"} 폴더 이동`} className="field h-8 w-full text-xs" value={file.folder_id ?? ""} onChange={async (event) => { await moveProjectFile(file.id, event.target.value || null); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); }}><option value="">폴더 없음</option>{folders.data?.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select> : <span className="text-xs text-muted">{folders.data?.find((folder) => folder.id === file.folder_id)?.name ?? "폴더 없음"}</span>}</div>
+              <div>{file.uploaded_by === user?.id || role === "owner" || role === "admin" ? <select aria-label={`${file.filename ?? "파일"} 폴더 이동`} className="field h-8 w-full text-xs" value={file.folder_id ?? ""} onChange={async (event) => { try { await moveProjectFile(file.id, event.target.value || null); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); showToast("파일을 이동했습니다.", { tone: "success" }); } catch { showToast("파일을 이동하지 못했습니다.", { tone: "error" }); } }}><option value="">폴더 없음</option>{folders.data?.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select> : <span className="text-xs text-muted">{folders.data?.find((folder) => folder.id === file.folder_id)?.name ?? "폴더 없음"}</span>}</div>
               <div className="min-w-0 text-xs text-muted">{file.task ? <Link to={`/tasks/${file.task.id}`} className="block truncate font-semibold text-brand hover:underline">{file.task.title}</Link> : "연결된 작업 없음"}</div>
               <span className="hidden text-xs text-muted xl:block">{formatBytes(file.original_size)}</span>
               <span className="hidden truncate text-xs text-muted xl:block">{file.uploader?.name ?? "사용자"}</span>
               <span className="hidden text-xs text-muted xl:block">{new Date(file.created_at).toLocaleDateString("ko-KR")}</span>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="secondary" size="sm" onClick={() => void download(file)}><Download size={14} /> 다운로드</Button>
-                {(file.uploaded_by === user?.id || role === "owner" || role === "admin") && <Button variant="ghost" size="sm" className="text-red-600" onClick={async () => { if (confirm("파일을 삭제할까요?")) { await deleteProjectFile(file); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); } }}><Trash2 size={14} /> 삭제</Button>}
+                {(file.uploaded_by === user?.id || role === "owner" || role === "admin") && <Button variant="ghost" size="sm" className="text-red-600" onClick={async () => { if (confirm("파일을 삭제할까요?")) { try { await deleteProjectFile(file); await queryClient.invalidateQueries({ queryKey: ["files", project.id] }); showToast("파일이 삭제되었습니다.", { tone: "success" }); } catch { showToast("파일을 삭제하지 못했습니다.", { tone: "error" }); } } }}><Trash2 size={14} /> 삭제</Button>}
               </div>
             </div>
           ))}
@@ -492,7 +501,6 @@ export function ProjectFilesPage() {
         )}
       </Modal>
       <Modal open={folderOpen} onClose={() => setFolderOpen(false)} title="새 폴더" description="프로젝트 파일을 정리할 폴더를 만듭니다.">
-        {createFolder.error && <Alert className="mb-3">{createFolder.error.message}</Alert>}
         <form onSubmit={(event) => { event.preventDefault(); createFolder.mutate(); }}><label className="label" htmlFor="folder-name">폴더 이름</label><Input id="folder-name" value={folderName} onChange={(event) => setFolderName(event.target.value)} maxLength={80} required autoFocus /><div className="mt-4 flex justify-end gap-2"><Button variant="secondary" onClick={() => setFolderOpen(false)}>취소</Button><Button type="submit" disabled={!folderName.trim() || createFolder.isPending}>만들기</Button></div></form>
       </Modal>
     </div>
@@ -503,7 +511,7 @@ export function ProjectActivityPage() {
   const { project } = useProjectContext();
   const activities = useQuery({
     queryKey: ["activities", project.id],
-    queryFn: () => listActivities(project.id),
+    queryFn: () => listProjectActivities(project.id),
   });
   return (
     <div className="page-wrap">
@@ -531,7 +539,7 @@ export function ProjectActivityPage() {
                   {activityLabel(activity.action)}
                 </p>
                 <p className="mt-1 text-[11px] text-muted">
-                  {new Date(activity.created_at).toLocaleString("ko-KR")}
+                  대상: {activityTargetLabel(activity.subject_type)} · {new Date(activity.created_at).toLocaleString("ko-KR")}
                 </p>
               </div>
             </div>
@@ -554,6 +562,7 @@ function AddMemberDialog({
   projectId: string;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<Exclude<ProjectRole, "owner">>("member");
   const search = useQuery({
@@ -566,8 +575,10 @@ function AddMemberDialog({
       addProjectMember(projectId, profile, role),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["members", projectId] });
+      showToast("팀원이 추가되었습니다.", { tone: "success" });
       onClose();
     },
+    onError: () => showToast("팀원을 추가하지 못했습니다.", { tone: "error" }),
   });
   return (
     <Modal
@@ -603,9 +614,6 @@ function AddMemberDialog({
           <option value="viewer">열람자</option>
         </select>
       </div>
-      {mutation.error && (
-        <Alert className="mt-3">{mutation.error.message}</Alert>
-      )}
       <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
         {search.data?.map((profile) => (
           <div
@@ -647,6 +655,7 @@ export function ProjectTeamPage() {
   const { project } = useProjectContext();
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const members = useQuery({
     queryKey: ["members", project.id],
     queryFn: () => listProjectMembers(project.id),
@@ -664,7 +673,9 @@ export function ProjectTeamPage() {
         queryClient.invalidateQueries({ queryKey: ["members", project.id] }),
         queryClient.invalidateQueries({ queryKey: ["tasks", project.id] }),
       ]);
+      showToast("팀원이 제거되었습니다.", { tone: "success" });
     },
+    onError: () => showToast("팀원을 제거하지 못했습니다.", { tone: "error" }),
   });
   const rewrap = useMutation({
     mutationFn: (member: ProjectMember) =>
@@ -672,6 +683,8 @@ export function ProjectTeamPage() {
         id: member.user_id,
         encryption_public_key: member.profile?.encryption_public_key ?? null,
       }),
+    onSuccess: () => showToast("프로젝트 접근 권한을 복구했습니다.", { tone: "success" }),
+    onError: () => showToast("프로젝트 접근 권한을 복구하지 못했습니다.", { tone: "error" }),
   });
   const myRole = members.data?.find(
     (member) => member.user_id === user?.id,
@@ -691,16 +704,6 @@ export function ProjectTeamPage() {
           )
         }
       />
-      {(remove.error || rewrap.error) && (
-        <Alert className="mb-4">
-          {remove.error?.message ?? rewrap.error?.message}
-        </Alert>
-      )}
-      {rewrap.isSuccess && (
-        <Alert tone="success" className="mb-4">
-           프로젝트 접근 권한을 복구했습니다.
-        </Alert>
-      )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {members.data?.map((member) => {
           const assigned =
@@ -822,6 +825,7 @@ export function ProjectTeamPage() {
 function GitHubIntegrationSection() {
   const { project } = useProjectContext();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const repositoryStatus = useQuery({
     queryKey: ["github-repository-status", project.id],
     queryFn: () => getGitHubRepositoryStatus(project.id),
@@ -855,7 +859,9 @@ function GitHubIntegrationSection() {
           queryKey: ["github-repository-status", project.id],
         }),
       ]);
+      showToast("GitHub 저장소 연결을 갱신했습니다.", { tone: "success" });
     },
+    onError: () => showToast("GitHub 저장소 연결을 갱신하지 못했습니다.", { tone: "error" }),
   });
   const state =
     repositoryStatus.data?.status ??
@@ -924,11 +930,6 @@ function GitHubIntegrationSection() {
             </div>
           </div>
         </div>
-        {repositoryStatus.data?.reconciled && (
-          <Alert tone="success" className="mt-5">
-            GitHub 저장소 연결을 복구했습니다.
-          </Alert>
-        )}
         {state === "conflict" && (
           <Alert className="mt-5">
             같은 이름의 저장소가 다른 프로젝트에 연결되어 있어 자동으로 연결하지 않았습니다.
@@ -937,9 +938,9 @@ function GitHubIntegrationSection() {
         {project.github_error_code && (
           <Alert className="mt-5">{githubErrorMessage(project.github_error_code)}</Alert>
         )}
-        {(retry.error || repositoryStatus.error) && (
+        {repositoryStatus.error && (
           <Alert className="mt-5">
-            {retry.error?.message ?? repositoryStatus.error?.message}
+            {repositoryStatus.error.message}
           </Alert>
         )}
         <div className="mt-6 flex flex-wrap gap-2">
@@ -982,6 +983,9 @@ export function ProjectSettingsPage() {
   });
   const user = useAuthStore((state) => state.user);
   const forgetProjectKey = useProjectKeyStore((state) => state.forget);
+  const permissions = usePermissions();
+  const canDeleteProject = permissions.has(ADMIN_PERMISSIONS.PROJECTS_DELETE);
+  const { showToast } = useToast();
   const role = members.data?.find(
     (member) => member.user_id === user?.id,
   )?.role;
@@ -995,14 +999,18 @@ export function ProjectSettingsPage() {
       await queryClient.invalidateQueries({
         queryKey: ["project", project.id],
       });
+      showToast("프로젝트 설정이 저장되었습니다.", { tone: "success" });
     },
+    onError: () => showToast("프로젝트 설정을 저장하지 못했습니다.", { tone: "error" }),
   });
   const archive = useMutation({
     mutationFn: () => updateProject(project.id, { status: "archived" }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      showToast("프로젝트가 보관되었습니다.", { tone: "success" });
       navigate("/projects");
     },
+    onError: () => showToast("프로젝트를 보관하지 못했습니다.", { tone: "error" }),
   });
   const deleteMutation = useMutation({
     mutationFn: () => deleteProject(project.id, confirmation),
@@ -1013,8 +1021,13 @@ export function ProjectSettingsPage() {
       queryClient.removeQueries({ queryKey: ["tasks", project.id] });
       queryClient.removeQueries({ queryKey: ["files", project.id] });
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      showToast("프로젝트가 삭제되었습니다.", { tone: "success" });
       navigate("/projects", { replace: true });
     },
+    onError: (error) => showToast(
+      error instanceof Error ? error.message : "프로젝트를 삭제하지 못했습니다.",
+      { tone: "error" },
+    ),
   });
   if (role !== "owner" && role !== "admin")
     return (
@@ -1076,7 +1089,7 @@ export function ProjectSettingsPage() {
           >
             <Archive size={16} /> 프로젝트 보관
           </Button>
-          {role === "owner" && (
+          {role === "owner" && canDeleteProject && (
             <Button
               variant="danger"
               className="mt-2 w-full"
@@ -1089,7 +1102,7 @@ export function ProjectSettingsPage() {
       </div>
       {role === "owner" && <div className="mt-5"><GitHubIntegrationSection /></div>}
       <Modal
-        open={dangerOpen}
+        open={dangerOpen && canDeleteProject}
         onClose={() => setDangerOpen(false)}
         title="프로젝트 영구 삭제"
         description="복구하기 어렵습니다. 계속하려면 프로젝트 이름을 정확히 입력하세요."
@@ -1098,9 +1111,6 @@ export function ProjectSettingsPage() {
           GitHub 저장소, 암호화 파일과 프로젝트 업무 데이터가 함께
           삭제됩니다.
         </Alert>
-        {deleteMutation.error && (
-          <Alert className="mt-3">{deleteMutation.error.message}</Alert>
-        )}
         <label className="label mt-4" htmlFor="danger-confirm">
           {project.name}
         </label>

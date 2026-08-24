@@ -20,6 +20,7 @@ import {
   Input,
   PageHeader,
   Spinner,
+  useToast,
 } from "../components/ui";
 import {
   listActivities,
@@ -172,20 +173,45 @@ export function GlobalCalendarPage() {
 }
 
 export function GlobalActivityPage() {
-  const activities = useQuery({
-    queryKey: ["activities", "all"],
-    queryFn: () => listActivities(),
+  const [projectId, setProjectId] = useState("");
+  const projects = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
   });
+  const activities = useQuery({
+    queryKey: ["activities", "global", projectId || "all"],
+    queryFn: () => listActivities(projectId || undefined),
+  });
+  const selectedProject = projects.data?.find((project) => project.id === projectId);
   return (
     <div className="page-wrap">
       <PageHeader
         eyebrow="활동"
-        title="전체 활동"
-        description="내가 접근 가능한 모든 프로젝트의 활동입니다."
+        title="활동"
+        description={selectedProject
+          ? `${selectedProject.name} 프로젝트의 활동입니다.`
+          : "내가 접근 가능한 모든 프로젝트의 활동입니다."}
+        action={
+          <div>
+            <label className="sr-only" htmlFor="global-activity-project">프로젝트 선택</label>
+            <select
+              id="global-activity-project"
+              className="field min-w-52"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              disabled={projects.isLoading}
+            >
+              <option value="">전체 활동</option>
+              {(projects.data ?? []).map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+        }
       />
-      {activities.error ? (
+      {activities.error || projects.error ? (
         <Alert>활동을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. <Button size="sm" variant="ghost" onClick={() => void activities.refetch()}>다시 시도</Button></Alert>
-      ) : activities.isLoading ? (
+      ) : activities.isLoading || projects.isLoading ? (
         <Spinner />
       ) : activities.data?.length ? (
         <div className="panel divide-y divide-line">
@@ -196,13 +222,14 @@ export function GlobalActivityPage() {
                 url={item.actor?.avatar_url}
                 size="sm"
               />
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm text-ink">
                   <strong>{item.actor?.name ?? "시스템"}</strong> ·{" "}
                   {activityLabel(item.action)}
                 </p>
                 <p className="mt-1 text-[11px] text-muted">
-                  {formatRelativeTime(item.created_at)}
+                  <span className="font-semibold text-brand">{item.project?.name ?? "프로젝트"}</span>
+                  {" · "}{formatRelativeTime(item.created_at)}
                 </p>
               </div>
             </div>
@@ -270,19 +297,22 @@ export function NotificationsPage() {
 
 export function SettingsPage() {
   const { profile, refreshProfile } = useAuthStore();
+  const { showToast } = useToast();
   const [github, setGithub] = useState(profile?.github_username ?? "");
   const [name, setName] = useState(profile?.name ?? "");
-  const [saved, setSaved] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const { error } = await supabase
-      .from("profiles")
-      .update({ name: name.trim(), github_username: github.trim() || null })
-      .eq("id", profile!.id);
-    if (error) throw new Error("프로필을 저장할 수 없습니다.");
-    await refreshProfile();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ name: name.trim(), github_username: github.trim() || null })
+        .eq("id", profile!.id);
+      if (error) throw new Error("프로필을 저장할 수 없습니다.");
+      await refreshProfile();
+      showToast("프로필이 저장되었습니다.", { tone: "success" });
+    } catch {
+      showToast("프로필을 저장하지 못했습니다.", { tone: "error" });
+    }
   };
   return (
     <div className="page-wrap max-w-4xl">
@@ -328,7 +358,7 @@ export function SettingsPage() {
             github.com/username → username
           </p>
           <Button type="submit" className="mt-5">
-            <Save size={15} /> {saved ? "저장됨" : "저장"}
+            <Save size={15} /> 저장
           </Button>
         </form>
         <section className="panel p-5">

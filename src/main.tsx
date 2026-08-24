@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { ConfigurationErrorScreen } from "./components/ConfigurationErrorScreen";
+import { ToastProvider } from "./components/ui";
 import { isSupabaseConfigured, supabaseConfigurationIssues } from "./lib/supabase";
 import { initializeThemePreference } from "./stores/themeStore";
 import "./styles.css";
@@ -18,8 +19,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {isSupabaseConfigured
-      ? <QueryClientProvider client={queryClient}><App /></QueryClientProvider>
-      : <ConfigurationErrorScreen issues={supabaseConfigurationIssues} />}
+    <ToastProvider>
+      {isSupabaseConfigured
+        ? <QueryClientProvider client={queryClient}><App /></QueryClientProvider>
+        : <ConfigurationErrorScreen issues={supabaseConfigurationIssues} />}
+    </ToastProvider>
   </React.StrictMode>
 );

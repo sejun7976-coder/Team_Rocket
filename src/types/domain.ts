@@ -141,6 +141,17 @@ export interface Activity {
   payload_encrypted: EncryptionEnvelope | null;
   created_at: string;
   actor?: Pick<Profile, "id" | "name" | "avatar_url">;
+  project?: Pick<Project, "id" | "name">;
+}
+
+export interface ProjectAnnouncement {
+  project_id: string;
+  content_encrypted: EncryptionEnvelope;
+  content: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  updater?: Pick<Profile, "id" | "name" | "student_id" | "avatar_url"> | null;
 }
 
 export interface ProjectFile {
