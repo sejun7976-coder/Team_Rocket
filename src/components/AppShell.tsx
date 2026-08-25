@@ -72,10 +72,10 @@ function NavigationLink({
       to={to}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+          "nav-item flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium transition",
           isActive
-            ? "bg-brand/10 text-brand"
-            : "text-muted hover:bg-raised hover:text-ink",
+            ? "nav-item-active text-brand"
+            : "text-muted hover:border-line/60 hover:bg-raised/70 hover:text-ink",
         )
       }
     >
@@ -176,13 +176,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     navigate("/login", { replace: true });
   };
   const sidebar = (
-    <aside className="flex h-full w-[250px] flex-col border-r border-line bg-surface">
+    <aside className="app-sidebar-shell flex h-full w-[250px] flex-col overflow-hidden">
       <Link
         to="/dashboard"
         aria-label="Team Rocket 대시보드"
-        className="flex h-16 items-center gap-3 border-b border-line px-5 transition hover:bg-raised focus-visible:bg-raised"
+        className="group flex h-[68px] items-center gap-3 border-b border-line/70 px-4 transition hover:bg-raised/60 focus-visible:bg-raised/60"
       >
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand font-black text-white">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-brand font-black text-white shadow-md shadow-brand/20 transition group-hover:-translate-y-px">
           R
         </span>
         <span>
@@ -194,7 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
         </span>
       </Link>
-      <nav className="scrollbar-thin flex-1 space-y-1 overflow-y-auto p-3">
+      <nav className="scrollbar-thin flex-1 space-y-1 overflow-y-auto p-3.5">
         {nav.map(([to, label, Icon]) => (
           <NavigationLink key={to} to={to} label={label} Icon={Icon} />
         ))}
@@ -211,7 +211,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
       </nav>
-      <div className="border-t border-line p-3">
+      <div className="border-t border-line/70 p-3">
+        <Link to="/settings" className="mb-2 flex items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 transition hover:border-line/60 hover:bg-raised/70">
+          <Avatar name={profile?.name ?? "사용자"} url={profile?.avatar_url} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-bold text-ink">{profile?.name ?? "사용자"}</span>
+            <span className="block truncate text-[10px] text-muted">{profile?.student_id ?? "내 계정"}</span>
+          </span>
+        </Link>
         <NavigationLink to="/settings" label="설정" Icon={Settings} />
         <button
           onClick={() => void signOut()}
@@ -225,22 +232,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <div className="fixed inset-y-0 left-0 z-40 hidden lg:block">
+    <div className="min-h-screen">
+      <div className="layer-navigation fixed inset-y-0 left-0 hidden p-3 lg:block">
         {sidebar}
       </div>
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="layer-navigation fixed inset-0 lg:hidden">
           <button
             aria-label="메뉴 닫기"
-            className="absolute inset-0 bg-slate-950/45"
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="relative h-full w-[270px]">
+          <div className="relative h-full w-[274px] p-3">
             {sidebar}
             <Button
               variant="ghost"
-              className="absolute right-3 top-4 h-8 w-8 p-0"
+               className="absolute right-5 top-5 h-8 w-8 p-0"
               aria-label="메뉴 닫기"
               title="닫기"
               onClick={() => setMobileOpen(false)}
@@ -250,8 +257,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-      <div className="lg:pl-[250px]">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur sm:px-6">
+      <div className="lg:pl-[274px]">
+        <header className="glass-toolbar layer-sticky sticky top-3 mx-3 mt-3 flex h-14 items-center justify-between rounded-2xl px-3 sm:px-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -268,7 +275,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 aria-label="Team Rocket 대시보드 breadcrumb"
                 className="inline-flex items-center gap-2 rounded-sm font-extrabold text-ink transition hover:text-brand focus-visible:text-brand"
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand text-[10px] font-black text-white">R</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-white/20 bg-brand text-[10px] font-black text-white shadow-sm">R</span>
                 <span>Team Rocket</span>
               </Link>
               {currentProject.data && <span className="ml-2 hidden max-w-48 truncate font-semibold text-muted sm:inline-block">/ {currentProject.data.name}</span>}
@@ -323,7 +330,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </Popover>
             <ThemeCycleButton className="border-transparent" />
-            <div className="ml-2 flex items-center gap-2 border-l border-line pl-3">
+            <div className="ml-1 flex items-center gap-2 border-l border-line/70 pl-3">
               <Avatar
                 name={profile?.name ?? "사용자"}
                 url={profile?.avatar_url}
@@ -351,7 +358,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main className="min-h-[calc(100vh-5rem)]">{children}</main>
       </div>
       <RocketAIPanel />
     </div>

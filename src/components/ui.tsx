@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -28,14 +29,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50",
+        "ui-button inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold disabled:cursor-not-allowed disabled:opacity-50",
         size === "sm" && "h-8 px-3 text-xs",
         size === "md" && "h-10 px-4 text-sm",
         size === "lg" && "h-12 px-5 text-sm",
-        variant === "primary" && "bg-brand text-white shadow-sm hover:bg-brand/90",
-        variant === "secondary" && "border border-line bg-surface text-ink hover:bg-raised",
-        variant === "ghost" && "text-muted hover:bg-raised hover:text-ink",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
+        variant === "primary" && "ui-button--primary text-white",
+        variant === "secondary" && "ui-button--secondary text-ink",
+        variant === "ghost" && "ui-button--ghost text-muted",
+        variant === "danger" && "ui-button--danger",
         className
       )}
       {...props}
@@ -82,8 +83,8 @@ export function Modal({ open, onClose, title, description, children, className }
   }, [open, onClose]);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="modal-title" className={cn("max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:p-6", className)}>
+    <div className="layer-dialog fixed inset-0 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="modal-title" className={cn("glass-strong max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl p-5 sm:p-6", className)}>
         <div className="mb-5 flex items-start justify-between gap-4">
           <div><h2 id="modal-title" className="text-lg font-bold text-ink">{title}</h2>{description && <p className="mt-1 text-sm text-muted">{description}</p>}</div>
           <Button variant="ghost" size="sm" aria-label="닫기" title="닫기" className="h-8 w-8 p-0" onClick={onClose}><X size={17} /></Button>
@@ -121,20 +122,70 @@ export function Popover({
   dismissKey?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const id = useId();
   const contentId = `${id}-content`;
-  const close = () => setOpen(false);
+  const close = useCallback(() => {
+    setOpen(false);
+    setPosition(null);
+  }, []);
 
   useEffect(() => {
-    setOpen(false);
-  }, [dismissKey]);
+    close();
+  }, [close, dismissKey]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const triggerElement = triggerRef.current;
+      const contentElement = contentRef.current;
+      if (!triggerElement || !contentElement) return;
+
+      const viewportMargin = 12;
+      const gap = 8;
+      const triggerRect = triggerElement.getBoundingClientRect();
+      const contentWidth = Math.min(contentElement.offsetWidth, window.innerWidth - viewportMargin * 2);
+      const naturalHeight = contentElement.scrollHeight;
+      const spaceBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - viewportMargin);
+      const spaceAbove = Math.max(0, triggerRect.top - gap - viewportMargin);
+      const placeAbove = naturalHeight > spaceBelow && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(96, placeAbove ? spaceAbove : spaceBelow);
+      const renderedHeight = Math.min(naturalHeight, maxHeight);
+      const preferredLeft = align === "right" ? triggerRect.right - contentWidth : triggerRect.left;
+      const left = Math.min(
+        Math.max(viewportMargin, preferredLeft),
+        Math.max(viewportMargin, window.innerWidth - contentWidth - viewportMargin),
+      );
+      const top = placeAbove
+        ? Math.max(viewportMargin, triggerRect.top - gap - renderedHeight)
+        : Math.min(triggerRect.bottom + gap, window.innerHeight - renderedHeight - viewportMargin);
+
+      setPosition({ left, top: Math.max(viewportMargin, top), maxHeight });
+    };
+
+    updatePosition();
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updatePosition);
+    if (triggerRef.current) observer?.observe(triggerRef.current);
+    if (contentRef.current) observer?.observe(contentRef.current);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [align, open]);
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) close();
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !contentRef.current?.contains(target)) close();
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -152,12 +203,17 @@ export function Popover({
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(POPOVER_OPEN_EVENT, onOtherPopover);
     };
-  }, [id, open]);
+  }, [close, id, open]);
 
   const toggle = () => {
     const next = !open;
     if (next) window.dispatchEvent(new CustomEvent(POPOVER_OPEN_EVENT, { detail: id }));
-    setOpen(next);
+    if (next) {
+      setPosition(null);
+      setOpen(true);
+    } else {
+      close();
+    }
   };
 
   return (
@@ -169,19 +225,26 @@ export function Popover({
         onClick: toggle,
         ref: triggerRef,
       })}
-      {open && (
+      {open && createPortal(
         <div
+          ref={contentRef}
           id={contentId}
           role={role}
           aria-label={label}
           className={cn(
-            "absolute top-full z-50 mt-2 rounded-xl border border-line bg-surface shadow-lift",
-            align === "right" ? "right-0" : "left-0",
+            "glass-popover popover-floating layer-popover fixed rounded-2xl",
             className,
           )}
+          style={{
+            left: position?.left ?? 0,
+            top: position?.top ?? 0,
+            maxHeight: position?.maxHeight,
+            visibility: position ? "visible" : "hidden",
+          }}
         >
           {typeof children === "function" ? children(close) : children}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -223,7 +286,7 @@ export function Toast({
       role={tone === "error" ? "alert" : "status"}
       aria-live={tone === "error" ? "assertive" : "polite"}
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-sm font-semibold shadow-2xl",
+        "glass-popover flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold",
         styles[tone],
       )}
     >
@@ -292,7 +355,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {createPortal(
         <div
           data-toast-viewport
-          className="fixed inset-x-4 bottom-20 z-[120] flex flex-col gap-2 sm:left-auto sm:right-5 sm:w-[min(420px,calc(100vw-2.5rem))]"
+          className="layer-toast fixed inset-x-4 bottom-20 flex flex-col gap-2 sm:left-auto sm:right-5 sm:w-[min(420px,calc(100vw-2.5rem))]"
           aria-label="작업 알림"
         >
           {toasts.map((toast) => (
@@ -318,7 +381,7 @@ export function useToast(): ToastContextValue {
 }
 
 export function EmptyState({ icon, title, description, action }: { icon: ReactNode; title: string; description: string; action?: ReactNode }) {
-  return <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-raised/50 p-8 text-center"><div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">{icon}</div><h3 className="font-bold text-ink">{title}</h3><p className="mt-1 max-w-md text-sm text-muted">{description}</p>{action && <div className="mt-5">{action}</div>}</div>;
+  return <div className="empty-state flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center"><div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/15 bg-brand/10 text-brand shadow-sm">{icon}</div><h3 className="font-bold text-ink">{title}</h3><p className="mt-1 max-w-md text-sm text-muted">{description}</p>{action && <div className="mt-5">{action}</div>}</div>;
 }
 
 export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: ReactNode }) {
@@ -326,7 +389,7 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
 }
 
 export function StatCard({ label, value, detail, icon }: { label: string; value: ReactNode; detail?: string; icon: ReactNode }) {
-  return <div className="panel flex h-full min-h-32 flex-col p-4 sm:p-5"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-muted">{label}</span><span className="shrink-0 text-brand">{icon}</span></div><div className="mt-auto pt-3 text-2xl font-extrabold text-ink">{value}</div>{detail && <p className="mt-1 min-h-4 text-xs text-muted">{detail}</p>}</div>;
+  return <div className="panel stat-card flex h-full min-h-32 flex-col p-4 sm:p-5"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-muted">{label}</span><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">{icon}</span></div><div className="mt-auto pt-3 text-2xl font-extrabold tracking-tight text-ink">{value}</div>{detail && <p className="mt-1 min-h-4 text-xs text-muted">{detail}</p>}</div>;
 }
 
 export function Alert({ children, tone = "error", className }: { children: ReactNode; tone?: "error" | "info" | "success"; className?: string }) {

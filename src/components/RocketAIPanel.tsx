@@ -169,14 +169,14 @@ export function RocketAIPanel() {
           aria-label="Rocket AI 열기"
           title="Rocket AI"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-[80] flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-brand/90"
+          className="rocket-ai-button layer-floating fixed bottom-5 right-5 flex h-[52px] w-[52px] items-center justify-center rounded-full text-white transition hover:-translate-y-0.5"
         >
           <Sparkles size={22} />
         </button>
       )}
       {open && (
-        <aside className="fixed inset-0 z-[90] flex flex-col border-line bg-surface shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[430px] sm:border-l" aria-label="Rocket AI">
-          <header className="border-b border-line p-4">
+        <aside className="rocket-ai-panel layer-floating fixed inset-0 flex flex-col sm:inset-y-3 sm:left-auto sm:right-3 sm:w-[430px] sm:overflow-hidden sm:rounded-3xl" aria-label="Rocket AI">
+          <header className="border-b border-line/70 bg-raised/20 p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2"><Bot size={19} className="text-brand" /><h2 className="font-extrabold text-ink">Rocket AI</h2></div>
               <Button variant="ghost" className="h-8 w-8 p-0" aria-label="Rocket AI 닫기" onClick={() => setOpen(false)}><X size={17} /></Button>
@@ -190,13 +190,13 @@ export function RocketAIPanel() {
                 {(models.data ?? []).map((model) => <option key={model.modelId} value={model.modelId}>{model.displayName}</option>)}
               </select>
             </div>
-            <p className="mt-3 rounded-xl bg-raised px-3 py-2 text-[10px] leading-4 text-muted">
+            <p className="subtle-panel mt-3 px-3 py-2 text-[10px] leading-4 text-muted">
               Rocket AI는 프로젝트 작업·일정·담당자·진행 상황 관리 전용입니다. 코딩·과제·문서 작성·일반 질문은 지원하지 않습니다. 대화 기록은 운영 및 오남용 방지를 위해 저장되며 관리자가 확인할 수 있습니다.
             </p>
           </header>
           <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
             {!messages.length && (
-              <div className="rounded-2xl border border-line bg-raised p-4 text-sm leading-6 text-muted">
+              <div className="subtle-panel rounded-2xl p-4 text-sm leading-6 text-muted">
                 프로젝트 작업을 요약하거나 작업 생성·상태 변경·담당자 배정을 요청할 수 있습니다. 변경 제안은 실행 전 반드시 확인합니다.
               </div>
             )}
@@ -204,11 +204,11 @@ export function RocketAIPanel() {
               const mutatingActions = message.actions?.filter(isMutatingAIAction) ?? [];
               return (
                 <div key={message.id} className={message.role === "user" ? "ml-10" : "mr-6"}>
-                  <div className={message.role === "user" ? "rounded-2xl bg-brand px-4 py-3 text-sm leading-6 text-white" : "rounded-2xl border border-line bg-raised px-4 py-3 text-sm leading-6 text-ink"}>
+                  <div className={message.role === "user" ? "rounded-2xl border border-brand/20 bg-brand/10 px-4 py-3 text-sm leading-6 text-ink" : "border-l border-line/70 px-4 py-2 text-sm leading-6 text-ink"}>
                     <p className="whitespace-pre-wrap break-words">{message.content}</p>
                   </div>
                   {mutatingActions.length > 0 && (
-                    <div className="mt-2 rounded-2xl border border-brand/20 bg-brand/[.04] p-3">
+                    <div className="subtle-panel mt-2 rounded-2xl border-brand/20 p-3">
                       <p className="text-xs font-extrabold text-ink">실행 전 확인 · {mutatingActions.length}개 변경</p>
                       <ul className="mt-2 space-y-1.5 text-xs leading-5 text-muted">
                         {mutatingActions.map((action, index) => <li key={`${message.id}-${index}`}>• {describeAIAction(action, tasks.data ?? [], members.data ?? [])}</li>)}
@@ -228,9 +228,9 @@ export function RocketAIPanel() {
                 </div>
               );
             })}
-            {ask.isPending && <div className="mr-20 flex items-center gap-2 rounded-2xl border border-line bg-raised p-3 text-xs text-muted"><Spinner className="h-4 w-4" /> AI가 프로젝트를 확인하고 있습니다.</div>}
+            {ask.isPending && <div className="subtle-panel mr-20 flex items-center gap-2 rounded-2xl p-3 text-xs text-muted"><Spinner className="h-4 w-4" /> AI가 프로젝트를 확인하고 있습니다.</div>}
           </div>
-          <footer className="border-t border-line p-4">
+          <footer className="border-t border-line/70 bg-raised/20 p-4">
             {!models.isLoading && !models.data?.length && <p className="mb-2 text-xs text-amber-700 dark:text-amber-300">현재 활성화된 AI 모델이 없습니다.</p>}
             <div className="flex items-end gap-2">
               <textarea

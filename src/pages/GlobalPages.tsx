@@ -73,12 +73,12 @@ export function MyTasksPage() {
       ) : tasks.isLoading ? (
         <Spinner />
       ) : mine.length ? (
-        <div className="panel divide-y divide-line">
+        <div className="panel divide-y divide-line/70 overflow-hidden">
           {mine.map((task) => (
             <Link
               key={task.id}
               to={`/tasks/${task.id}`}
-              className="flex items-center gap-4 p-4 hover:bg-raised"
+              className="flex items-center gap-4 p-4 transition hover:bg-raised/60"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand">
                 <CheckSquare size={17} />
@@ -143,12 +143,12 @@ export function GlobalCalendarPage() {
       ) : tasks.isLoading ? (
         <Spinner />
       ) : dated.length ? (
-        <div className="panel divide-y divide-line">
+        <div className="panel divide-y divide-line/70 overflow-hidden">
           {dated.map((task) => (
             <Link
               key={task.id}
               to={`/tasks/${task.id}`}
-              className="flex items-center gap-4 p-4 hover:bg-raised"
+              className="flex items-center gap-4 p-4 transition hover:bg-raised/60"
             >
               <div className="w-24 text-xs font-bold text-brand">
                 {task.due_date ?? task.start_date}
@@ -214,9 +214,9 @@ export function GlobalActivityPage() {
       ) : activities.isLoading || projects.isLoading ? (
         <Spinner />
       ) : activities.data?.length ? (
-        <div className="panel divide-y divide-line">
+        <div className="activity-timeline panel overflow-hidden">
           {activities.data?.map((item) => (
-            <div key={item.id} className="flex gap-3 p-4">
+            <div key={item.id} className="activity-item flex gap-3 border-b border-line/60 p-4 last:border-b-0">
               <Avatar
                 name={item.actor?.name ?? "시스템"}
                 url={item.actor?.avatar_url}
@@ -257,7 +257,7 @@ export function NotificationsPage() {
       ) : notifications.isLoading ? (
         <Spinner />
       ) : notifications.data?.length ? (
-        <div className="panel divide-y divide-line">
+        <div className="panel divide-y divide-line/70 overflow-hidden">
           {notifications.data?.map((item) => (
             <button
               key={item.id}
@@ -268,7 +268,7 @@ export function NotificationsPage() {
                   queryKey: ["notifications"],
                 });
               }}
-              className={`flex w-full items-center gap-3 p-4 text-left hover:bg-raised ${!item.read_at ? "bg-brand/[.03]" : ""}`}
+              className={`flex w-full items-center gap-3 p-4 text-left transition hover:bg-raised/60 ${!item.read_at ? "bg-brand/[.04]" : ""}`}
             >
               <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand">
                 <Bell size={16} />
@@ -366,7 +366,7 @@ export function SettingsPage() {
             <Monitor size={18} className="text-brand" />
             <h2 className="font-extrabold text-ink">화면</h2>
           </div>
-          <div className="mt-5 flex items-center justify-between rounded-xl border border-line p-3">
+          <div className="subtle-panel mt-5 flex items-center justify-between p-3">
             <span className="text-sm text-muted">테마</span>
             <ThemeCycleButton />
           </div>

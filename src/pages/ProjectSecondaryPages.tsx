@@ -128,12 +128,12 @@ export function ProjectCalendarPage() {
         title="프로젝트 일정"
         description={`오늘 마감 ${dated.filter((task) => task.due_date === today && task.status !== "done").length}개 · 이번 주 ${thisWeek.length}개 · 지연 ${overdue.length}개`}
         action={
-          <div className="flex rounded-xl border border-line bg-surface p-1">
+          <div className="segmented-control">
             {(["month", "week", "agenda"] as const).map((item) => (
               <button
                 key={item}
                 onClick={() => setMode(item)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${mode === item ? "bg-brand text-white" : "text-muted"}`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${mode === item ? "bg-surface text-brand shadow-sm" : "text-muted hover:text-ink"}`}
               >
                 {item === "month"
                   ? "월"
@@ -150,7 +150,7 @@ export function ProjectCalendarPage() {
       ) : tasks.isLoading ? (
         <Spinner />
       ) : (
-        <div className="panel overflow-hidden">
+        <div className="panel calendar-surface overflow-hidden">
           <div className="flex items-center justify-between border-b border-line p-4">
             <Button
               variant="ghost"
@@ -183,7 +183,7 @@ export function ProjectCalendarPage() {
               {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
                 <div
                   key={day}
-                  className="border-b border-r border-line bg-raised p-2 text-center text-[10px] font-bold text-muted"
+                  className="border-b border-r border-line/70 bg-raised/50 p-2 text-center text-[10px] font-bold text-muted"
                 >
                   {day}
                 </div>
@@ -198,7 +198,7 @@ export function ProjectCalendarPage() {
                       day,
                     )
                   }
-                  className={`min-h-28 border-b border-r border-line p-1.5 ${isSameMonth(day, cursor) ? "bg-surface" : "bg-raised/50 text-muted"}`}
+                  className={`min-h-28 border-b border-r border-line/70 p-1.5 transition hover:bg-brand/[.025] ${isSameMonth(day, cursor) ? "bg-surface/55" : "bg-raised/25 text-muted"}`}
                 >
                   <div
                     className={`mb-1 text-[11px] ${isSameDay(day, new Date()) ? "flex h-5 w-5 items-center justify-center rounded-full bg-brand font-bold text-white" : "text-muted"}`}
@@ -382,7 +382,7 @@ export function ProjectFilesPage() {
         title="파일"
         description="프로젝트에 필요한 파일을 폴더별로 업로드하고 관리합니다."
         action={role !== "viewer" ? (
-          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white">
+          <label className="ui-button ui-button--primary inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white">
             <Upload size={16} /> 파일 업로드
             <input
               type="file"
@@ -433,14 +433,14 @@ export function ProjectFilesPage() {
       ) : files.isLoading || folders.isLoading ? (
         <Spinner />
       ) : visibleFiles.length ? (
-        <div className="panel divide-y divide-line overflow-hidden">
-          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_minmax(7rem,1fr)_7rem_auto] gap-3 bg-raised px-4 py-3 text-xs font-semibold text-muted xl:grid">
+        <div className="panel divide-y divide-line/70 overflow-hidden">
+          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_minmax(7rem,1fr)_7rem_auto] gap-3 bg-raised/45 px-4 py-3 text-xs font-semibold text-muted xl:grid">
             <span>파일명</span><span>폴더</span><span>연결된 작업</span><span>크기</span><span>업로더</span><span>업로드 날짜</span><span className="text-right">메뉴</span>
           </div>
           {visibleFiles.map((file) => (
             <div
               key={file.id}
-              className="grid gap-3 p-4 xl:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_minmax(7rem,1fr)_7rem_auto] xl:items-center"
+              className="grid gap-3 p-4 transition hover:bg-brand/[.025] xl:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_5rem_minmax(7rem,1fr)_7rem_auto] xl:items-center"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
@@ -525,9 +525,9 @@ export function ProjectActivityPage() {
       ) : activities.isLoading ? (
         <Spinner />
       ) : activities.data?.length ? (
-        <div className="panel divide-y divide-line">
+        <div className="activity-timeline panel overflow-hidden">
           {activities.data?.map((activity) => (
-            <div key={activity.id} className="flex gap-3 p-4">
+            <div key={activity.id} className="activity-item flex gap-3 border-b border-line/60 p-4 last:border-b-0">
               <Avatar
                 name={activity.actor?.name ?? "시스템"}
                 url={activity.actor?.avatar_url}
@@ -713,7 +713,7 @@ export function ProjectTeamPage() {
               ),
             ) ?? [];
           return (
-            <div key={member.user_id} className="panel p-5">
+            <div key={member.user_id} className="panel project-card p-5">
               <div className="flex items-start gap-3">
                 <Avatar
                   name={member.profile?.name ?? "팀원"}

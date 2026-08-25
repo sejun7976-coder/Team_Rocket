@@ -82,7 +82,6 @@ import {
   PageHeader,
   Popover,
   Spinner,
-  StatCard,
   useToast,
 } from "../components/ui";
 
@@ -136,8 +135,8 @@ export function ProjectLayoutPage() {
     );
   return (
     <div>
-      <div className="border-b border-line bg-surface">
-        <div className="mx-auto max-w-[1500px] px-4 pt-4 sm:px-6 lg:px-8">
+      <div className="project-workspace-header px-4 pt-3 sm:px-6 lg:px-8">
+        <div className="project-workspace-shell mx-auto max-w-[1436px] p-3 sm:p-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-lg font-extrabold text-brand">
@@ -164,7 +163,7 @@ export function ProjectLayoutPage() {
                         : project.data.status}
                   </Badge>
                 </div>
-                <p className="mt-0.5 text-xs text-muted">Team Rocket 프로젝트 워크스페이스</p>
+                <p className="mt-0.5 max-w-2xl truncate text-xs text-muted">{project.data.description || "Team Rocket 프로젝트 워크스페이스"}</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
@@ -179,7 +178,7 @@ export function ProjectLayoutPage() {
                     type="button"
                     aria-label={`프로젝트 참여 팀원 ${members.data?.length ?? 0}명 보기`}
                     title="전체 참여 팀원 보기"
-                    className="flex cursor-pointer items-center rounded-xl px-1.5 py-1 transition hover:bg-raised"
+                    className="project-member-cluster flex cursor-pointer items-center rounded-xl px-2 py-1.5 transition hover:bg-raised/70"
                   >
                     <span className="flex -space-x-2">
                       {members.data?.slice(0, 5).map((member) => (
@@ -222,7 +221,7 @@ export function ProjectLayoutPage() {
               </Popover>
             </div>
           </div>
-          <nav className="scrollbar-thin mt-3 flex gap-1 overflow-x-auto pb-0">
+          <nav className="scrollbar-thin project-tabs mt-3 max-w-full overflow-x-auto">
             {projectNav.map(([path, label, Icon]) => (
                 <NavLink
                   end={path === ""}
@@ -230,10 +229,10 @@ export function ProjectLayoutPage() {
                   to={`/projects/${projectId}${path ? `/${path}` : ""}`}
                   className={({ isActive }) =>
                     cn(
-                      "flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-xs font-semibold transition",
+                      "flex shrink-0 items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-xs font-semibold transition",
                       isActive
-                        ? "border-brand text-brand"
-                        : "border-transparent text-muted hover:text-ink",
+                        ? "project-tab-active"
+                        : "text-muted hover:bg-raised/70 hover:text-ink",
                     )
                   }
                 >
@@ -302,9 +301,8 @@ function ProjectAnnouncementCard({ projectId }: { projectId: string }) {
     setEditing(false);
   };
   return (
-    <>
-      <section className="panel mb-4 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+      <section className="overview-announcement-section">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/10 text-brand">
               <Megaphone size={17} />
@@ -320,9 +318,9 @@ function ProjectAnnouncementCard({ projectId }: { projectId: string }) {
             </Button>
           )}
         </div>
-        <div className="p-5">
+        <div className="pt-3">
           {announcement.isLoading ? (
-            <div className="flex min-h-20 items-center justify-center"><Spinner /></div>
+            <div className="flex min-h-16 items-center justify-center"><Spinner /></div>
           ) : announcement.error ? (
             <Alert>
               공지사항을 불러오지 못했습니다. <Button size="sm" variant="ghost" onClick={() => void announcement.refetch()}>다시 시도</Button>
@@ -357,14 +355,13 @@ function ProjectAnnouncementCard({ projectId }: { projectId: string }) {
               </p>
             </div>
           ) : (
-            <div className="py-4 text-center">
+            <div className="overview-inline-empty py-3 text-center">
               <p className="text-sm font-semibold text-ink">등록된 공지가 없습니다.</p>
               <p className="mt-1 text-xs text-muted">중요한 일정이나 팀 안내를 공유해 보세요.</p>
             </div>
           )}
         </div>
       </section>
-    </>
   );
 }
 
@@ -387,100 +384,139 @@ export function ProjectOverviewPage() {
   const dueSoon = list.filter((task) => task.status !== "done" && inDays(task) !== null && inDays(task)! <= 3).sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 8);
   const myTasks = list.filter((task) => task.task_assignees?.some((item) => item.user_id === user?.id));
   const importantMine = [...myTasks].filter((task) => task.status !== "done").sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999")).slice(0, 5);
+  const progress = projectProgress(list);
+  const stats = [
+    { label: "전체 작업", value: list.length, icon: <CheckSquare size={15} />, tone: "brand" },
+    { label: "완료", value: list.filter((task) => task.status === "done").length, icon: <CheckSquare size={15} />, tone: "success" },
+    { label: "진행 중", value: list.filter((task) => task.status === "in_progress" || task.status === "review").length, icon: <CircleDot size={15} />, tone: "brand" },
+    { label: "할 일", value: list.filter((task) => task.status === "todo").length, icon: <Clock3 size={15} />, tone: "neutral" },
+    { label: "지연", value: overdue.length, icon: <AlertTriangle size={15} />, tone: "danger" },
+  ] as const;
   return (
-    <div className="page-wrap">
-      <PageHeader
-        eyebrow="프로젝트 개요"
-        title="프로젝트 현황"
-        description={project.description ?? "프로젝트 설명이 없습니다."}
-      />
-      <ProjectAnnouncementCard projectId={project.id} />
-      <section className="panel mb-4 p-5">
-        <div className="flex items-center justify-between text-sm"><h2 className="font-extrabold text-ink">프로젝트 진행률</h2><strong className="text-brand">{projectProgress(list)}%</strong></div>
-        <div className="mt-3 h-3 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-brand transition-all" style={{ width: `${projectProgress(list)}%` }} /></div>
-      </section>
-      {tasks.error || activities.error ? (
-        <Alert>프로젝트 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</Alert>
-      ) : tasks.isLoading ? (
-        <Spinner />
-      ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard
-              label="전체 작업"
-              value={list.length}
-              icon={<CheckSquare size={18} />}
-            />
-            <StatCard
-              label="완료"
-              value={list.filter((task) => task.status === "done").length}
-              icon={<CheckSquare size={18} />}
-            />
-            <StatCard
-              label="진행 중"
-              value={list.filter((task) => task.status === "in_progress" || task.status === "review").length}
-              icon={<CircleDot size={18} />}
-            />
-            <StatCard
-              label="할 일"
-              value={list.filter((task) => task.status === "todo").length}
-              icon={<Clock3 size={18} />}
-            />
-            <StatCard label="지연" value={overdue.length} icon={<AlertTriangle size={18} />} />
+    <div className="page-wrap project-overview-page">
+      <div className="project-overview-intro">
+        <PageHeader
+          eyebrow="프로젝트 개요"
+          title="프로젝트 현황"
+          description={project.description ?? "프로젝트 설명이 없습니다."}
+        />
+      </div>
+
+      <section className="project-overview-surface">
+        <ProjectAnnouncementCard projectId={project.id} />
+        <div className="overview-divider" />
+
+        <section className="overview-progress-section">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-extrabold text-ink">프로젝트 진행률</h2>
+              <p className="mt-0.5 text-[11px] text-muted">전체 작업의 진행 상태를 반영합니다.</p>
+            </div>
+            <strong className="text-xl font-extrabold tracking-tight text-brand">{progress}%</strong>
           </div>
-          <div className="mt-6">
-            <section className="panel p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="font-extrabold text-ink">최근 작업</h2>
-                <Link
-                  to={`/projects/${project.id}/board`}
-                  className="text-xs font-semibold text-brand"
-                >
-                  보드 보기
-                </Link>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-line/70">
+            <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        </section>
+
+        <div className="overview-divider" />
+        {tasks.error || activities.error ? (
+          <Alert>프로젝트 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</Alert>
+        ) : tasks.isLoading ? (
+          <div className="flex min-h-20 items-center justify-center"><Spinner /></div>
+        ) : (
+          <div className="overview-stat-strip">
+            {stats.map((stat) => (
+              <div key={stat.label} className="overview-stat-item">
+                <span className={cn("overview-stat-icon", `overview-stat-icon--${stat.tone}`)}>{stat.icon}</span>
+                <span className="text-[11px] font-semibold text-muted">{stat.label}</span>
+                <strong className={cn("text-xl font-extrabold tracking-tight text-ink", stat.tone === "danger" && stat.value > 0 && "text-red-600")}>{stat.value}</strong>
               </div>
-              <div className="mt-4 space-y-2">
+            ))}
+          </div>
+        )}
+      </section>
+
+      {!tasks.error && !activities.error && !tasks.isLoading && (
+        <section className="project-overview-secondary">
+          <div className="grid lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)]">
+            <section className="overview-content-section border-b border-line/60 lg:border-b-0 lg:border-r">
+              <div className="overview-section-heading">
+                <h2>최근 작업</h2>
+                <Link to={`/projects/${project.id}/board`}>보드 보기</Link>
+              </div>
+              <div className="mt-3 space-y-1.5">
                 {list.slice(0, 6).map((task) => (
-                  <Link
-                    key={task.id}
-                    to={`/tasks/${task.id}`}
-                    className="flex items-center gap-3 rounded-xl border border-line p-3 hover:bg-raised"
-                  >
-                    <Badge tone={statusTone(task.status)}>
-                      {statusLabel(task.status)}
-                    </Badge>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                      {task.title}
-                    </span>
-                    <span className="text-xs font-bold text-muted">
-                      {task.progress}%
-                    </span>
+                  <Link key={task.id} to={`/tasks/${task.id}`} className="overview-task-row">
+                    <Badge tone={statusTone(task.status)}>{statusLabel(task.status)}</Badge>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span>
+                    <span className="text-xs font-bold text-muted">{task.progress}%</span>
                   </Link>
                 ))}
-                {list.length === 0 && (
-                  <p className="py-8 text-center text-sm text-muted">
-                    아직 작업이 없습니다.
-                  </p>
-                )}
+                {list.length === 0 && <p className="overview-inline-empty">아직 작업이 없습니다.</p>}
+              </div>
+            </section>
+
+            <section className="overview-content-section">
+              <div className="overview-section-heading">
+                <h2>최근 활동</h2>
+                <Link to={`/projects/${project.id}/activity`}>전체 보기</Link>
+              </div>
+              <div className="mt-3 space-y-3">
+                {activities.data?.slice(0, 6).map((activity) => (
+                  <div key={activity.id} className="flex gap-3">
+                    <Avatar name={activity.actor?.name ?? "시스템"} url={activity.actor?.avatar_url} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm leading-5 text-ink"><strong>{activity.actor?.name ?? "시스템"}</strong>님이 {activityLabel(activity.action)}</p>
+                      <p className="mt-0.5 text-[10px] text-muted">{activityTargetLabel(activity.subject_type)} · {new Date(activity.created_at).toLocaleString("ko-KR")}</p>
+                    </div>
+                  </div>
+                ))}
+                {!activities.data?.length && <p className="overview-inline-empty">최근 활동이 없습니다.</p>}
               </div>
             </section>
           </div>
-          <div className="mt-5 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-            <section className="panel p-5">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">내 작업</h2><Link to="/my-tasks" className="text-xs font-semibold text-brand">전체 보기</Link></div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center"><div className="subtle-panel p-3"><strong className="block text-lg text-ink">{myTasks.filter((task) => inDays(task) === 0 && task.status !== "done").length}</strong><span className="text-[10px] text-muted">오늘</span></div><div className="subtle-panel p-3"><strong className="block text-lg text-ink">{myTasks.filter((task) => inDays(task) !== null && inDays(task)! >= 0 && inDays(task)! <= 7 && task.status !== "done").length}</strong><span className="text-[10px] text-muted">이번 주</span></div><div className="subtle-panel p-3"><strong className="block text-lg text-red-600">{myTasks.filter((task) => task.status !== "done" && inDays(task) !== null && inDays(task)! < 0).length}</strong><span className="text-[10px] text-muted">지연</span></div></div>
-              <div className="mt-3 space-y-2">{importantMine.map((task) => <Link key={task.id} to={`/tasks/${task.id}`} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:bg-raised"><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span><Badge tone={inDays(task) !== null && inDays(task)! < 0 ? "red" : inDays(task) === 0 ? "amber" : "neutral"}>{inDays(task) === null ? "마감 없음" : inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘 마감" : `${inDays(task)}일 남음`}</Badge></Link>)}</div>
+
+          <div className="overview-divider m-0" />
+          <div className="grid lg:grid-cols-2">
+            <section className="overview-content-section border-b border-line/60 lg:border-b-0 lg:border-r">
+              <div className="overview-section-heading">
+                <h2>내 작업</h2>
+                <Link to="/my-tasks">전체 보기</Link>
+              </div>
+              <div className="overview-mini-stat-strip">
+                <div><strong>{myTasks.filter((task) => inDays(task) === 0 && task.status !== "done").length}</strong><span>오늘</span></div>
+                <div><strong>{myTasks.filter((task) => inDays(task) !== null && inDays(task)! >= 0 && inDays(task)! <= 7 && task.status !== "done").length}</strong><span>이번 주</span></div>
+                <div><strong className="text-red-600">{myTasks.filter((task) => task.status !== "done" && inDays(task) !== null && inDays(task)! < 0).length}</strong><span>지연</span></div>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {importantMine.map((task) => (
+                  <Link key={task.id} to={`/tasks/${task.id}`} className="overview-task-row">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span>
+                    <Badge tone={inDays(task) !== null && inDays(task)! < 0 ? "red" : inDays(task) === 0 ? "amber" : "neutral"}>{inDays(task) === null ? "마감 없음" : inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘 마감" : `${inDays(task)}일 남음`}</Badge>
+                  </Link>
+                ))}
+                {!importantMine.length && <p className="overview-inline-empty">진행 중인 내 작업이 없습니다.</p>}
+              </div>
             </section>
-            <section className="panel p-5">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">마감 임박</h2><Link to={`/projects/${project.id}/calendar`} className="text-xs font-semibold text-brand">캘린더 보기</Link></div>
-              <div className="mt-3 space-y-2">{dueSoon.map((task) => <Link key={task.id} to={`/tasks/${task.id}`} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:bg-raised"><span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span><span className={`text-xs font-bold ${inDays(task)! < 0 ? "text-red-600" : "text-muted"}`}>{inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘" : inDays(task) === 1 ? "내일" : `${inDays(task)}일 이내`}</span></Link>)}{!dueSoon.length && <p className="py-6 text-center text-sm text-muted">3일 이내 마감 작업이 없습니다.</p>}</div>
-            </section>
-            <section className="panel p-5 lg:col-span-2 2xl:col-span-1">
-              <div className="flex items-center justify-between"><h2 className="font-extrabold text-ink">최근 활동</h2><Link to={`/projects/${project.id}/activity`} className="text-xs font-semibold text-brand">전체 보기</Link></div>
-              <div className="mt-3 space-y-3">{activities.data?.slice(0, 6).map((activity) => <div key={activity.id} className="flex gap-3"><Avatar name={activity.actor?.name ?? "시스템"} url={activity.actor?.avatar_url} size="sm" /><div className="min-w-0"><p className="text-sm text-ink"><strong>{activity.actor?.name ?? "시스템"}</strong>님이 {activityLabel(activity.action)}</p><p className="mt-0.5 text-[10px] text-muted">{activityTargetLabel(activity.subject_type)} · {new Date(activity.created_at).toLocaleString("ko-KR")}</p></div></div>)}</div>
+
+            <section className="overview-content-section">
+              <div className="overview-section-heading">
+                <h2>마감 임박</h2>
+                <Link to={`/projects/${project.id}/calendar`}>캘린더 보기</Link>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {dueSoon.map((task) => (
+                  <Link key={task.id} to={`/tasks/${task.id}`} className="overview-task-row">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{task.title}</span>
+                    <span className={`text-xs font-bold ${inDays(task)! < 0 ? "text-red-600" : "text-muted"}`}>{inDays(task)! < 0 ? `${Math.abs(inDays(task)!)}일 지연` : inDays(task) === 0 ? "오늘" : inDays(task) === 1 ? "내일" : `${inDays(task)}일 이내`}</span>
+                  </Link>
+                ))}
+                {!dueSoon.length && <p className="overview-inline-empty">3일 이내 마감 작업이 없습니다.</p>}
+              </div>
             </section>
           </div>
-        </>
+        </section>
       )}
     </div>
   );
@@ -851,7 +887,7 @@ export function DraggableTaskCard({ task }: { task: Task }) {
     }
   };
   const transform = drag.transform
-    ? `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0)`
+    ? `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0) scale(1.018)`
     : undefined;
   return (
     <article
@@ -864,9 +900,10 @@ export function DraggableTaskCard({ task }: { task: Task }) {
         if (!drag.isDragging) navigate(`/tasks/${task.id}`);
       }}
       className={cn(
-        "cursor-grab rounded-xl border border-line bg-surface p-3.5 shadow-sm transition hover:border-brand/30 hover:shadow-md active:cursor-grabbing",
-        drag.isDragging && "z-50 opacity-70 shadow-lift",
+        "task-card cursor-grab rounded-xl border p-3.5 active:cursor-grabbing",
+        drag.isDragging && "layer-drag opacity-80",
       )}
+      data-dragging={drag.isDragging}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <Badge
@@ -954,9 +991,9 @@ function BoardColumn({ status, tasks }: { status: TaskStatus; tasks: Task[] }) {
     <section
       ref={drop.setNodeRef}
       className={cn(
-        "min-h-[520px] rounded-2xl border border-line bg-raised/65 p-3 transition",
-        drop.isOver && "border-brand bg-brand/5",
+        "board-column min-h-[520px] rounded-2xl border p-3 transition",
       )}
+      data-drop-active={drop.isOver}
     >
       <div className="mb-3 flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
@@ -1061,11 +1098,11 @@ export function BoardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex rounded-xl border border-line bg-surface p-1">
+          <div className="segmented-control">
             <button
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-semibold",
-                scope === "all" ? "bg-brand text-white" : "text-muted",
+                scope === "all" ? "bg-surface text-brand shadow-sm" : "text-muted hover:text-ink",
               )}
               onClick={() => setScope("all")}
             >
@@ -1074,7 +1111,7 @@ export function BoardPage() {
             <button
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-semibold",
-                scope === "mine" ? "bg-brand text-white" : "text-muted",
+                scope === "mine" ? "bg-surface text-brand shadow-sm" : "text-muted hover:text-ink",
               )}
               onClick={() => setScope("mine")}
             >
@@ -1104,16 +1141,18 @@ export function BoardPage() {
           sensors={sensors}
           onDragEnd={(event) => void onDragEnd(event)}
         >
-          <div className="grid min-w-[980px] grid-cols-4 gap-3 overflow-x-auto pb-4">
-            {(["todo", "in_progress", "review", "done"] as TaskStatus[]).map(
-              (status) => (
-                <BoardColumn
-                  key={status}
-                  status={status}
-                  tasks={visible.filter((task) => task.status === status)}
-                />
-              ),
-            )}
+          <div className="scrollbar-thin overflow-x-auto pb-4">
+            <div className="grid min-w-[980px] grid-cols-4 gap-3">
+              {(["todo", "in_progress", "review", "done"] as TaskStatus[]).map(
+                (status) => (
+                  <BoardColumn
+                    key={status}
+                    status={status}
+                    tasks={visible.filter((task) => task.status === status)}
+                  />
+                ),
+              )}
+            </div>
           </div>
         </DndContext>
       )}
@@ -1168,7 +1207,7 @@ export function TaskListPage() {
       ) : filtered.length ? (
         <div className="panel overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="clean-table w-full min-w-[760px] text-left text-sm">
               <thead className="border-b border-line bg-raised text-xs text-muted">
                 <tr>
                   <th className="px-4 py-3">작업</th>

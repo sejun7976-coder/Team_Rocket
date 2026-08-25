@@ -14,8 +14,13 @@ export default {
         brand: "rgb(var(--brand) / <alpha-value>)"
       },
       boxShadow: {
-        soft: "0 18px 50px rgba(15, 23, 42, .08)",
-        lift: "0 18px 36px rgba(15, 23, 42, .14)"
+        soft: "var(--shadow-sm)",
+        lift: "var(--shadow-md)",
+        glass: "var(--shadow-glass)"
+      },
+      borderRadius: {
+        glass: "var(--radius-lg)",
+        floating: "var(--radius-xl)"
       }
     }
   },

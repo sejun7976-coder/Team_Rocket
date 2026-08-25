@@ -164,7 +164,7 @@ function AccessLogDialog({
         </div>
       ) : logs.data?.logs.length ? (
         <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="clean-table w-full min-w-[900px] text-left text-sm">
             <thead className="border-b border-line bg-raised text-xs text-muted">
               <tr>
                 <th className="px-4 py-3">날짜/시간</th>
@@ -635,11 +635,15 @@ function PermissionDialog({
                 .map((definition) => (
                   <label
                     key={definition.key}
-                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3 hover:bg-raised"
+                    className="subtle-panel flex cursor-pointer items-center gap-4 p-3 transition hover:bg-raised/70"
                   >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold text-ink">{definition.label}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted">{definition.description}</span>
+                    </span>
                     <input
                       type="checkbox"
-                      className="mt-1"
+                      className="permission-toggle shrink-0"
                       checked={permissions.includes(definition.key)}
                       onChange={(event) => setPermissions((current) =>
                         event.target.checked
@@ -647,10 +651,6 @@ function PermissionDialog({
                           : current.filter((permission) => permission !== definition.key),
                       )}
                     />
-                    <span>
-                      <span className="block text-sm font-bold text-ink">{definition.label}</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-muted">{definition.description}</span>
-                    </span>
                   </label>
                 ))}
             </div>
@@ -730,11 +730,14 @@ export function AdminUsersPage() {
       {users.isLoading ? (
         <Spinner />
       ) : users.data?.length ? (
-        <div className="space-y-2">
+        <div className="panel overflow-hidden">
+          <div className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,.9fr)_auto] gap-3 border-b border-line/70 bg-raised/45 px-4 py-3 text-[11px] font-semibold text-muted md:grid">
+            <span>사용자</span><span>계정 및 권한</span><span>최근 접속</span><span className="sr-only">메뉴</span>
+          </div>
           {users.data.map((managedUser) => (
             <article
               key={managedUser.id}
-              className="panel grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,.9fr)_auto]"
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line/60 p-4 transition last:border-b-0 hover:bg-brand/[.025] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,.9fr)_auto]"
             >
               <div className="min-w-0">
                 <div className="truncate font-bold text-ink">

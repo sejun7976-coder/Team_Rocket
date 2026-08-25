@@ -11,6 +11,8 @@ import roleFunction from "../../supabase/functions/admin-set-user-role/index.ts?
 import migration from "../../supabase/migrations/202608240001_project_announcements_and_admin_roles.sql?raw";
 import permissionMigration from "../../supabase/migrations/202608240002_admin_permissions.sql?raw";
 import generalPermissionMigration from "../../supabase/migrations/202608250002_general_permissions_and_ai_models.sql?raw";
+import announcementConstraintFix from "../../supabase/migrations/20260825043731_fix_project_announcement_activity_constraints.sql?raw";
+import dueNotificationGuardFix from "../../supabase/migrations/20260825044047_fix_due_notification_account_guard.sql?raw";
 
 describe("project workspace enhancements", () => {
   it("keeps project activity explicitly scoped while RLS remains membership-based", () => {
@@ -29,6 +31,27 @@ describe("project workspace enhancements", () => {
     expect(migration).toContain("content_encrypted jsonb not null");
     expect(migration).toContain("record_project_announcement_activity");
     expect(projectPages).toContain("프로젝트 멤버 모두가 함께 편집할 수 있습니다.");
+  });
+
+  it("keeps announcement activity types and due-notification access guards aligned with the current schema", () => {
+    for (const subjectType of [
+      "project",
+      "member",
+      "task",
+      "assignee",
+      "comment",
+      "file",
+      "project_announcement",
+    ]) {
+      expect(announcementConstraintFix).toContain(`'${subjectType}'`);
+    }
+    expect(announcementConstraintFix).toContain("validate constraint activities_subject_type_check");
+    expect(migration).toContain("'announcement_created'");
+    expect(migration).toContain("'announcement_updated'");
+    expect(dueNotificationGuardFix).toContain("if not public.can_access_business_data() then");
+    expect(dueNotificationGuardFix).not.toContain("current_account_ready");
+    expect(dueNotificationGuardFix).toMatch(/grant execute on function public\.refresh_due_notifications\(\)\s+to authenticated;/u);
+    expect(dueNotificationGuardFix).toMatch(/grant execute on function public\.refresh_due_notifications\(\)\s+to service_role;/u);
   });
 
   it("changes existing system roles only through a capability-protected server path", () => {
