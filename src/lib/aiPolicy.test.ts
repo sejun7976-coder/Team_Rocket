@@ -75,6 +75,8 @@ describe("Rocket AI project-management policy", () => {
     })[0]?.content ?? "";
     expect(outputPrompt).toContain("must never be classified as user BYPASS for punishment");
     expect(aiChat).not.toMatch(/outputGuard[\s\S]{0,800}record_ai_policy_violation/u);
+    expect(aiChat).toContain("recoverRocketAIMessage(mainResult.output)");
+    expect(aiChat).toContain("잘못된 실행 작업을 제거하고 안전한 본문만 표시함");
   });
 
   it("checks suspension before project membership, rate limit, secrets, and Gateway work", () => {
@@ -133,6 +135,8 @@ describe("Rocket AI project-management policy", () => {
     expect(panelSource).not.toContain("projects.data?.[0]");
     expect(panelSource).toContain("대화 기록은 운영 및 오남용 방지를 위해 저장되며 관리자가 확인할 수 있습니다.");
     expect(panelSource).toContain("disabled={!prompt.trim() || !projectId || !modelId || !contextReady || ask.isPending}");
+    expect(panelSource).toContain("rocket-ai-composer");
+    expect(panelSource).toContain("실행 전 확인");
     expect(aiChat).toContain("AI_CONVERSATION_MODEL_MISMATCH");
   });
 

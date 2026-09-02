@@ -466,7 +466,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .permission-toggle:checked::after { transform: translateX(1rem); }
   .permission-toggle:disabled { opacity: .55; }
 
-  .rocket-ai-panel { border: 1px solid var(--glass-border); background: var(--glass-surface-strong); box-shadow: var(--shadow-floating); }
+  .rocket-ai-panel {
+    border: 1px solid var(--glass-border);
+    background:
+      radial-gradient(circle at 82% 4%, rgb(var(--brand) / .14), transparent 14rem),
+      radial-gradient(circle at 8% 92%, rgb(103 199 221 / .08), transparent 18rem),
+      var(--glass-surface-strong);
+    box-shadow: var(--shadow-floating);
+  }
+  .rocket-ai-header, .rocket-ai-footer { background: rgb(var(--raised) / .34); }
+  .rocket-ai-message { border: 1px solid var(--glass-line); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 10px 26px rgb(20 36 60 / .055); }
+  .rocket-ai-message--user { border-color: rgb(var(--brand) / .2); background: linear-gradient(145deg, rgb(var(--brand) / .13), rgb(var(--brand) / .065)); }
+  .rocket-ai-message--assistant { background: rgb(var(--surface) / .42); }
+  .rocket-ai-composer {
+    border: 1px solid var(--glass-border);
+    background:
+      linear-gradient(145deg, rgb(var(--surface) / .8), rgb(var(--raised) / .57)),
+      var(--glass-surface-subtle);
+    box-shadow: 0 18px 44px rgb(18 35 61 / .14), inset 0 1px 0 var(--glass-highlight);
+    transition: border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+  }
+  .rocket-ai-composer:focus-within { border-color: rgb(var(--brand) / .45); box-shadow: 0 20px 50px rgb(var(--brand) / .13), 0 0 0 3px rgb(var(--brand) / .08), inset 0 1px 0 var(--glass-highlight); }
+  .rocket-ai-input { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
+  .rocket-ai-safety-chip { border: 1px solid var(--glass-line); background: rgb(var(--canvas) / .38); box-shadow: inset 0 1px 0 var(--glass-highlight); }
+  .rocket-ai-send { border: 1px solid rgb(var(--brand) / .16); background: linear-gradient(180deg, rgb(var(--ink) / .98), rgb(var(--ink) / .88)); color: rgb(var(--surface)); box-shadow: 0 7px 18px rgb(14 25 43 / .2), inset 0 1px 0 rgb(255 255 255 / .2); }
+  .rocket-ai-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgb(14 25 43 / .26), inset 0 1px 0 rgb(255 255 255 / .24); }
+  .rocket-ai-send:not(:disabled):active { transform: translateY(0) scale(.96); }
   .rocket-ai-button { border: 1px solid var(--glass-border); background: linear-gradient(145deg, rgb(var(--brand) / .9), rgb(var(--brand) / .68)); box-shadow: 0 18px 42px rgb(var(--brand) / .25), inset 0 1px 0 rgb(255 255 255 / .35); }
   .rocket-ai-button:hover { box-shadow: 0 22px 50px rgb(var(--brand) / .32), inset 0 1px 0 rgb(255 255 255 / .4); }
 
@@ -477,6 +502,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .panel, .glass-toolbar, .app-sidebar-shell, .auth-card, .project-workspace-shell { -webkit-backdrop-filter: saturate(125%) blur(var(--blur-md)); backdrop-filter: saturate(125%) blur(var(--blur-md)); }
   .glass-strong, .glass-popover, .rocket-ai-panel { -webkit-backdrop-filter: saturate(135%) blur(var(--blur-lg)); backdrop-filter: saturate(135%) blur(var(--blur-lg)); }
+  .rocket-ai-header, .rocket-ai-footer, .rocket-ai-composer { -webkit-backdrop-filter: saturate(125%) blur(var(--blur-md)); backdrop-filter: saturate(125%) blur(var(--blur-md)); }
   .subtle-panel { -webkit-backdrop-filter: saturate(110%) blur(var(--blur-sm)); backdrop-filter: saturate(110%) blur(var(--blur-sm)); }
   .project-overview-surface, .project-overview-secondary { -webkit-backdrop-filter: saturate(120%) blur(var(--blur-md)); backdrop-filter: saturate(120%) blur(var(--blur-md)); }
 }

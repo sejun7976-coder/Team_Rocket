@@ -79,7 +79,7 @@ function parseAction(value: unknown, constraints: AIActionConstraints): AIAction
     const description = text(source.description, 4000) ?? null;
     const status = typeof source.status === "string" && STATUSES.has(source.status) ? source.status : "todo";
     const priority = typeof source.priority === "string" && PRIORITIES.has(source.priority) ? source.priority : "medium";
-    const dueDate = date(source.dueDate);
+    const dueDate = date(source.dueDate ?? null);
     const assigned = assigneeIds(source.assigneeIds ?? [], constraints.memberIds);
     if (!title || description === null || dueDate === undefined || !assigned) return null;
     return {
@@ -148,6 +148,19 @@ export function parseRocketAIResult(value: unknown, constraints: AIActionConstra
   if (parsedActions.some((action) => !action)) throw new Error("AI_OUTPUT_INVALID");
   const actions = parsedActions as AIAction[];
   return { message, actions };
+}
+
+const ACTION_RECOVERY_NOTICE = "\n\n실행 제안의 형식이 올바르지 않아 안전하게 제외했습니다. 답변을 확인한 뒤 같은 작업을 다시 요청해 주세요.";
+
+/**
+ * Preserve an already safety-approved assistant message when only its action
+ * payload is malformed. No action is ever recovered or executed here.
+ */
+export function recoverRocketAIMessage(value: unknown): RocketAIResult {
+  const source = record(value);
+  const message = text(source?.message, 12_000 - ACTION_RECOVERY_NOTICE.length, true);
+  if (!source || !message) throw new Error("AI_OUTPUT_INVALID");
+  return { message: `${message}${ACTION_RECOVERY_NOTICE}`, actions: [] };
 }
 
 export function isMutatingAIAction(action: AIAction): action is MutatingAIAction {

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Send, Sparkles, X } from "lucide-react";
+import { ArrowUp, Bot, Check, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { isMutatingAIAction, type AIAction } from "../../supabase/functions/_shared/ai/actionSchema";
@@ -11,6 +11,7 @@ import { listProjectActivities } from "../services/activity";
 import { listAIModels, requestRocketAI } from "../services/ai";
 import { getProjectAnnouncement, listProjectMembers, listProjects } from "../services/projects";
 import { listTasks } from "../services/tasks";
+import { MarkdownText } from "./MarkdownText";
 import { Button, Spinner, useToast } from "./ui";
 
 interface ChatMessage {
@@ -42,6 +43,7 @@ export function RocketAIPanel() {
   const activities = useQuery({ queryKey: ["activities", projectId], queryFn: () => listProjectActivities(projectId), enabled: open && Boolean(projectId) });
   const announcement = useQuery({ queryKey: ["project-announcement", projectId], queryFn: () => getProjectAnnouncement(projectId), enabled: open && Boolean(projectId) });
   const selectedProject = projects.data?.find((project) => project.id === projectId);
+  const selectedModel = models.data?.find((model) => model.modelId === modelId);
   const contextReady = Boolean(selectedProject && tasks.data && members.data && activities.data && !announcement.isLoading);
 
   useEffect(() => {
@@ -175,8 +177,8 @@ export function RocketAIPanel() {
         </button>
       )}
       {open && (
-        <aside className="rocket-ai-panel layer-floating fixed inset-0 flex flex-col sm:inset-y-3 sm:left-auto sm:right-3 sm:w-[430px] sm:overflow-hidden sm:rounded-3xl" aria-label="Rocket AI">
-          <header className="border-b border-line/70 bg-raised/20 p-4">
+        <aside className="rocket-ai-panel layer-floating fixed inset-0 flex flex-col overflow-hidden sm:inset-y-3 sm:left-auto sm:right-3 sm:w-[430px] sm:rounded-3xl" aria-label="Rocket AI">
+          <header className="rocket-ai-header border-b border-line/70 p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2"><Bot size={19} className="text-brand" /><h2 className="font-extrabold text-ink">Rocket AI</h2></div>
               <Button variant="ghost" className="h-8 w-8 p-0" aria-label="Rocket AI 닫기" onClick={() => setOpen(false)}><X size={17} /></Button>
@@ -204,8 +206,10 @@ export function RocketAIPanel() {
               const mutatingActions = message.actions?.filter(isMutatingAIAction) ?? [];
               return (
                 <div key={message.id} className={message.role === "user" ? "ml-10" : "mr-6"}>
-                  <div className={message.role === "user" ? "rounded-2xl border border-brand/20 bg-brand/10 px-4 py-3 text-sm leading-6 text-ink" : "border-l border-line/70 px-4 py-2 text-sm leading-6 text-ink"}>
-                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  <div className={message.role === "user" ? "rocket-ai-message rocket-ai-message--user rounded-2xl px-4 py-3 text-sm leading-6 text-ink" : "rocket-ai-message rocket-ai-message--assistant rounded-2xl px-4 py-3 text-sm leading-6 text-ink"}>
+                    {message.role === "assistant"
+                      ? <MarkdownText>{message.content}</MarkdownText>
+                      : <p className="whitespace-pre-wrap break-words">{message.content}</p>}
                   </div>
                   {mutatingActions.length > 0 && (
                     <div className="subtle-panel mt-2 rounded-2xl border-brand/20 p-3">
@@ -230,12 +234,13 @@ export function RocketAIPanel() {
             })}
             {ask.isPending && <div className="subtle-panel mr-20 flex items-center gap-2 rounded-2xl p-3 text-xs text-muted"><Spinner className="h-4 w-4" /> AI가 프로젝트를 확인하고 있습니다.</div>}
           </div>
-          <footer className="border-t border-line/70 bg-raised/20 p-4">
+          <footer className="rocket-ai-footer border-t border-line/70 p-3 sm:p-4">
             {!models.isLoading && !models.data?.length && <p className="mb-2 text-xs text-amber-700 dark:text-amber-300">현재 활성화된 AI 모델이 없습니다.</p>}
-            <div className="flex items-end gap-2">
+            <div className="rocket-ai-composer relative overflow-hidden rounded-[26px] p-2">
               <textarea
-                className="field min-h-11 max-h-32 flex-1 resize-y py-2.5 text-sm"
+                className="rocket-ai-input min-h-[72px] max-h-40 w-full resize-none bg-transparent px-3 py-2 text-sm leading-6 text-ink outline-none placeholder:text-muted/70"
                 value={prompt}
+                rows={2}
                 maxLength={4_000}
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={(event) => {
@@ -244,12 +249,31 @@ export function RocketAIPanel() {
                     submit();
                   }
                 }}
-                placeholder="프로젝트 작업을 요청하세요..."
+                placeholder="프로젝트 작업을 요청하세요"
                 aria-label="AI 메시지"
               />
-              <Button className="h-11 w-11 p-0" aria-label="AI 메시지 전송" disabled={!prompt.trim() || !projectId || !modelId || !contextReady || ask.isPending} onClick={submit}>
-                <Send size={16} />
-              </Button>
+              <div className="flex items-center justify-between gap-3 px-2 pb-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="rocket-ai-safety-chip inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold text-muted">
+                    <ShieldCheck size={12} /> 실행 전 확인
+                  </span>
+                  <span className="hidden truncate text-[10px] text-muted/80 sm:inline">Enter 전송 · Shift+Enter 줄바꿈</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="max-w-[108px] truncate text-[11px] font-bold text-ink" title={selectedModel?.displayName}>
+                    {selectedModel?.displayName ?? "모델 선택"}
+                  </span>
+                  <button
+                    type="button"
+                    className="rocket-ai-send flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={ask.isPending ? "AI 응답 생성 중" : "AI 메시지 전송"}
+                    disabled={!prompt.trim() || !projectId || !modelId || !contextReady || ask.isPending}
+                    onClick={submit}
+                  >
+                    {ask.isPending ? <Spinner className="h-4 w-4" /> : <ArrowUp size={17} strokeWidth={2.5} />}
+                  </button>
+                </div>
+              </div>
             </div>
           </footer>
         </aside>

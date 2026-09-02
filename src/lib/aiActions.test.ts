@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseRocketAIResult } from "../../supabase/functions/_shared/ai/actionSchema";
+import { parseRocketAIResult, recoverRocketAIMessage } from "../../supabase/functions/_shared/ai/actionSchema";
 import { executeApprovedAIActions, type AIActionServices } from "./aiActions";
 import type { ProjectMember, Task } from "../types/domain";
 
@@ -126,5 +126,35 @@ describe("approved AI actions", () => {
     }, constraints)).toThrow("AI_OUTPUT_INVALID");
     expect(() => parseRocketAIResult({ message: "초과", actions: Array.from({ length: 11 }, () => ({ type: "summarize_project" })) }, constraints))
       .toThrow("AI_OUTPUT_INVALID");
+  });
+
+  it("defaults optional create-task fields instead of blocking an otherwise safe proposal", () => {
+    const result = parseRocketAIResult({
+      message: "새 작업을 제안합니다.",
+      actions: [{ type: "create_task", title: "발표 자료 검토" }],
+    }, {
+      projectId: PROJECT_ID,
+      taskIds: new Set([TASK_ID]),
+      memberIds: new Set([MEMBER_ID]),
+      allowMutations: true,
+    });
+    expect(result.actions).toEqual([expect.objectContaining({
+      type: "create_task",
+      dueDate: null,
+      assigneeIds: [],
+      status: "todo",
+      priority: "medium",
+    })]);
+  });
+
+  it("keeps a safe message but discards every action when schema recovery is needed", () => {
+    expect(recoverRocketAIMessage({
+      message: "현재 프로젝트에는 진행 중인 작업이 2개 있습니다.",
+      actions: [{ type: "invented_tool", command: "do something" }],
+    })).toEqual({
+      message: expect.stringContaining("현재 프로젝트에는 진행 중인 작업이 2개 있습니다."),
+      actions: [],
+    });
+    expect(() => recoverRocketAIMessage({ actions: [] })).toThrow("AI_OUTPUT_INVALID");
   });
 });
